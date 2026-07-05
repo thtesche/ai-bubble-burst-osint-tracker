@@ -5,7 +5,7 @@
 
 set -e
 
-# --- Konfiguration ---
+# --- Configuration ---
 DATE=$(date +"%Y-%m-%d")
 REPORT_DIR="../web/src/content/reports"
 PROMPT_FILE="../prompts/agent_prompt.md"
@@ -13,22 +13,22 @@ LOG_FILE="agent_run.log"
 
 echo "[$(date)] Starting AI-Bubble-OSINT-Tracker Agent..." | tee -a "$LOG_FILE"
 
-# 1. Sicherstellen, dass das Verzeichnis existiert
+# 1. Ensure the directory exists
 mkdir -p "$REPORT_DIR"
 
-# 2. Prüfen, ob der Prompt existiert
+# 2. Check if the prompt exists
 if [ ! -f "$PROMPT_FILE" ]; then
     echo "[$(date)] ERROR: Prompt file not found at $PROMPT_FILE" | tee -a "$LOG_FILE"
     exit 1
 fi
 
-# 3. Agenten-Aufruf via pi.dev
-# Wir lesen den Prompt aus der Datei und übergeben ihn an pi.dev im Print-Modus (-p).
+# 3. Agent call via pi.dev
+# We read the prompt from the file and pass it to pi.dev in print mode (-p).
 echo "[$(date)] Running pi.dev agent with system prompt..." | tee -a "$LOG_FILE"
 
-# Wir nutzen cat, um den Inhalt der Prompt-Datei zu lesen und übergeben ihn als Argument.
-# Hinweis: Bei sehr großen Prompts könnte man hier auf stdin umsteigen, 
-# aber für pi.dev -p ist die Übergabe als String üblich.
+# We use cat to read the content of the prompt file and pass it as an argument.
+# Note: For very large prompts, one might switch to stdin, 
+# but for pi.dev -p, passing as a string is common.
 pi.dev -p "$(cat "$PROMPT_FILE")" > "$REPORT_DIR/report-$DATE.md"
 
 if [ $? -eq 0 ]; then
@@ -38,18 +38,18 @@ else
     exit 1
 fi
 
-# 4. Git Automatisierung (Deployment Trigger)
+# 4. Git Automation (Deployment Trigger)
 echo "[$(date)] Committing changes to GitHub..." | tee -a "$LOG_FILE"
 
-# Wir gehen davon aus, dass das Skript im Ordner 'scripts/' liegt
+# We assume the script is located in the 'scripts/' folder
 cd ..
 
-# Sicherstellen, dass wir in einem Git-Repo sind
+# Ensure we are in a git repository
 if [ ! -d ".git" ]; then
     echo "[$(date)] WARNING: Not a git repository. Skipping commit/push." | tee -a "$LOG_FILE"
 else
     git add web/src/content/reports/
-    # Nur committen, wenn es Änderungen gibt
+    # Only commit if there are changes
     if git diff --cached --quiet; then
         echo "[$(date)] No changes to commit." | tee -a "$LOG_FILE"
     else
