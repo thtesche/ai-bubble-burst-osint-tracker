@@ -1,11 +1,11 @@
-# AI-Bubble-OSINT-Tracker 🫧📉
+# AI-Bubble-Burst-OSINT-Tracker 🫧📉
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Framework](https://img.shields.io/badge/framework-Astro-ff5d01.svg)
 ![Agent](https://img.shields.io/badge/agent-pi.dev-green.svg)
 
 ## 👁️ Vision
-Der **AI-Bubble-OSINT-Tracker** ist ein autonomes Analyse-System, das die Frage stellt: *Wann platzt die KI-Blase?* 
+Der **AI-Bubble-Burst-OSINT-Tracker** ist ein autonomes Analyse-System, das die Frage stellt: *Wann platzt die KI-Blase?* 
 
 Anstatt auf menschliche Analysen zu warten, nutzt das Projekt eine spezialisierte Agenten-Architektur, um täglich Open Source Intelligence (OSINT) zu sammeln. Durch die Korrelation von Cloud-Infrastruktur-Ausgaben (CapEx), Startup-Finanzierungszyklen und technologischen Durchbrüchen berechnet das System eine tägliche "Bubble Probability Score".
 
@@ -35,8 +35,8 @@ Im Gegensatz zu schwerfälligen Frameworks (wie LangChain oder CrewAI) setzt die
 ### Lokale Entwicklung
 1. **Repository klonen:**
    ```bash
-   git clone https://github.com/your-repo/ai-bubble-osint-tracker.git
-   cd ai-bubble-osint-tracker
+   git clone https://github.com/your-repo/ai-bubble-burst-osint-tracker.git
+   cd ai-bubble-burst-osint-tracker
    ```
 
 2. **Agenten testen:**
