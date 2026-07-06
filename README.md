@@ -1,61 +1,56 @@
-# AI-Bubble-Burst-OSINT-Tracker 🫧📉
+# AI-Bubble-Burst-OSINT-Tracker
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Framework](https://img.shields.io/badge/framework-Astro-ff5d01.svg)
-![Agent](https://img.shields.io/badge/agent-pi.dev-green.svg)
+Ein hochgradig robuster, modularer Tracker zur Identifizierung von Anzeichen einer KI-Blase durch die Kombination von News-Sentiment und Marktdaten.
 
-## 👁️ Vision
-The **AI-Bubble-Burst-OSINT-Tracker** is an autonomous analysis system that asks the question: *When will the AI bubble burst?* 
+## 🚀 Kernkonzept
+Der Tracker berechnet einen **"Bubble Burst Score" (0-100%)** basierend auf zwei Dimensionen:
+1.  **Sentiment (Qualitativ):** Analyse von News-Inhalten auf Hype-Keywords vs. technische Substanz (via LLM & Snippet-Parsing).
+2.  **Market Action (Quantitativ):** Analyse von Kursbewegungen relevanter Tech-Indizes und Aktien.
 
-Instead of waiting for human analysis, this project uses a specialized agent architecture to collect Open Source Intelligence (OSINT) daily. By correlating cloud infrastructure spending (CapEx), startup funding cycles, and technological breakthroughs, the system calculates a daily "Bubble Probability Score".
+## 🛠 Architektur & Resilienz
+Das System wurde nach dem Prinzip der **"Graceful Degradation"** entwickelt, um auch gegen aggressive Bot-Schutzmechanismen (z.B. auf Yahoo Finance oder Reuters) stabil zu bleiben:
 
-## 🏗️ Architecture: The "Lean Agent" Approach
-Unlike heavy frameworks (such as LangChain or CrewAI), this project focuses on maximum efficiency and local control:
+*   **Hybrid-Execution:** Das System nutzt eine lokale Python-Umgebung (`venv`) für schwere Berechnungen und die Hermes-Runtime für die Web-Interaktion.
+*   **Cascade-Extraction Strategy:** 
+    *   *Level 1 (Fast):* Extraktion direkt aus Such-Snippets (extrem schnell & bot-resistent).
+    *   *Level 2 (Deep):* Falls Snippet fehlschlägt $\rightarrow$ Vollständige Seiten-Extraktion via `web_extract`.
+    *   *Level 3 (Fallback):* Falls alles fehlschlägt $\rightarrow$ Nutzung neutraler Werte, um die Pipeline stabil zu halten.
+*   **Modularität:** Klare Trennung zwischen `core` (Logik), `fetchers` (Daten) und `delivery` (Output).
 
-* **Orchestration:** A lightweight Bash script controls the workflow.
-* **Agentic Engine:** Uses the `pi.dev` CLI tool in print mode (`-p`). This allows for precise control of the agent logic without unnecessary overhead.
-* **Local Intelligence:** Inference is performed entirely locally via an inference server hosting a **Gemma 4 (31B)** model. This guarantees data privacy and independence from cloud providers.
-* **Data Pipeline:** The agent generates structured Markdown files that serve as the "Single Source of Truth".
-* **Frontend:** A high-performance, static website based on **Astro**, which consumes the Markdown data via *Content Collections*.
+## 📂 Projektstruktur
+```text
+src/
+├── core/
+│   ├── engine.py          # Scoring-Logik & mathematische Formel
+│   └── test_full_pipeline_live.py # E2E-Test (Hybrid Mode)
+├── fetchers/
+│   ├── news.py            # News-Suche & Snippet/Deep Extraction
+│   └── market.py          # Markt-Suche & Preis-Extraktion (Search-basiert)
+└── delivery/              # (Geplant: Telegram/Discord Integration)
+```
 
-## 🛠️ Tech Stack
-- **Agent Engine:** `pi.dev` (CLI)
-- **LLM:** Gemma 4 (31B) via Local Inference Server
-- **Frontend:** [Astro](https://astro.build/) (i18n ready, Static Site Generation)
-- **Deployment:** GitHub Actions -> GitHub Pages
-- **Automation:** Cronjobs (Bash/Git)
+## 🛠 Installation & Setup (Lokal)
 
-## 🚀 Installation & Setup
+### 1. Umgebung vorbereiten
+Erstelle ein lokales Virtual Environment, um die Hermes-Umgebung nicht zu beeinflussen:
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install yfinance pandas
+```
 
-### Prerequisites
-- `pi.dev` CLI installed and in your PATH.
-- A running local inference server (compatible with `pi.dev` configuration).
-- Git & Node.js (for the Astro frontend).
+### 2. Ausführung (Manuell)
+Um den gesamten Prozess inklusive echter Web-Daten zu testen, nutze die Hermes-Runtime (da diese die `hermes_tools` bereitstellt):
+```bash
+# Führe den E2E-Test in der Hermes-Umgebung aus
+execute_code "import sys; sys.path.append('/Users/thtesche/VibeCoding/ai-bubble-burst-osint-tracker'); from src.core.test_full_pipeline_live import e2e_test; e2e_test()"
+```
 
-### Local Development
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/your-repo/ai-bubble-burst-osint-tracker.git
-   cd ai-bubble-burst-osint-tracker
-   ```
+## 📈 Roadmap (V2)
+- [ ] **Echte API-Anbindung:** Ersetzung des Scrapings durch professionelle Finanz-APIs (Alpha Vantage/Polygon).
+- [ ] **Automatisierung:** Einrichtung eines Hermes Cronjobs für tägliche Telegram-Reports.
+- [ ] **Erweiterte Quellen:** Integration von Krypto-Daten und VC-Funding-News.
+- [ ] **Visualisierung:** Dashboard zur Darstellung der Score-Historie.
 
-2. **Test the agent:**
-   Run the bootstrap script manually to trigger the first analysis:
-   ```bash
-   chmod +x scripts/run_agent.sh
-   ./scripts/run_agent.sh
-   ```
-
-3. **Start the frontend:**
-   ```bash
-   cd web/
-   npm install
-   npm run dev
-   ```
-
-## 📅 Workflow & Deployment
-The process is fully automated:
-1. **Trigger:** A daily cronjob starts `scripts/run_agent.sh`.
-2. **Analysis:** The agent performs web scraping and writes a new `.md` file to `web/src/content/reports/`.
-3. **Commit:** The script automatically commits the new file to the repository.
-4. **Build:** GitHub Actions detects the push, builds the Astro project, and deploys it to GitHub Pages.
+---
+*Developed with Hermes Agent (by Nous Research)*
