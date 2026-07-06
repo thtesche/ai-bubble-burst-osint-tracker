@@ -5,8 +5,9 @@ class MarketDataFetcher:
     Verantwortlich für das Abrufen von Finanzdaten via Search-Snippets & Deep Extraction.
     Nutzt eine Kaskade: Snippet -> Deep Extraction (web_extract) -> Fallback.
     """
-    def __init__(self, tickers: list[str]):
+    def __init__(self, tickers: list[str], logger=None):
         self.tickers = tickers
+        self.logger = logger
 
     def _extract_price_from_text(self, text: str) -> float | None:
         """Hilfsmethode zur Extraktion eines Preises aus einem String mittels Regex."""
