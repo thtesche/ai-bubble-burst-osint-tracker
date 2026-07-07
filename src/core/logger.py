@@ -1,15 +1,23 @@
 import os
 import json
+import re
 from datetime import datetime
 
 class RunLogger:
     """
     Verantwortlich für das Speichern des gesamten Datenflusses eines Runs.
-    Erstellt ein strukturiertes Verzeichnis pro Durchlauf.
+    Nutzt einen absoluten Pfad zum Projekt-Root, um sicherzustellen, 
+    dass Logs im lokalen Dateisystem des Nutzers landen.
     """
     def __init__(self, base_dir="logs/runs"):
+        # Wir versuchen den Projekt-Root zu finden oder nutzen das aktuelle CWD
+        # In der Hermes-Runtime ist das CWD meist der Projekt-Root.
+        self.project_root = os.environ.get("PROJECT_ROOT", os.getcwd())
+        
+        # Wir bauen den Pfad absolut auf
+        self.base_dir = os.path.abspath(os.path.join(self.project_root, base_dir))
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.run_dir = os.path.join(base_dir, self.timestamp)
+        self.run_dir = os.path.join(self.base_dir, self.timestamp)
         self.content_dir = os.path.join(self.run_dir, "extracted_content")
         self._setup_dirs()
 
@@ -38,5 +46,3 @@ class RunLogger:
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(summary, f, indent=4)
         print(f"[LOG] Run summary saved to {file_path}")
-
-import re # Needed for safe_id

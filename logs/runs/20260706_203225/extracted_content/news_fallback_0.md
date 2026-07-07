@@ -1,0 +1,1 @@
+The AI stock bubble, much debated through the back half of 2025, has already burst. That's the conclusion of John Higgins, chief markets economist at Capital Economics.
