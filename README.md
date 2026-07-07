@@ -32,7 +32,7 @@ src/
 ## 🛠 Installation & Setup (Lokal)
 
 ### 1. Umgebung vorbereiten
-Erstelle ein lokales Virtual Environment, um die Hermes-Umgebung nicht zu beeinflussen:
+Erstelle ein lokales Virtual Environment direkt im Projektverzeichnis:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
@@ -40,16 +40,16 @@ pip install yfinance pandas
 ```
 
 ### 2. Ausführung (Manuell)
-Um den gesamten Prozess inklusive echter Web-Daten zu testen, nutze die Hermes-Runtime (da diese die `hermes_tools` bereitstellt):
+Um den gesamten Prozess inklusive echter Daten zu testen, nutze die Hermes-Runtime (da diese die `hermes_tools` bereitstellt):
 ```bash
 # Führe den E2E-Test in der Hermes-Umgebung aus
 execute_code "import sys; sys.path.append('/Users/thtesche/VibeCoding/ai-bubble-burst-osint-tracker'); from src.core.test_full_pipeline_live import e2e_test; e2e_test()"
 ```
 
 ## 📈 Roadmap (V2)
-- [ ] **Echte API-Anbindung:** Ersetzung des Scrapings durch professionelle Finanz-APIs (Alpha Vantage/Polygon).
+- [ ] **Echte API-Anbindung:** Ersetzung des Scrapings durch professionelle Finanz-APIs (z.B. *Alpha Vantage* oder *Polygon.io*).
 - [ ] **Automatisierung:** Einrichtung eines Hermes Cronjobs für tägliche Telegram-Reports.
-- [ ] **Erweiterte Quellen:** Integration von Krypto-Daten und VC-Funding-News.
+- [ ] **Erweiterte Datenquellen:** Integration von Krypto-Daten und VC-Funding-News.
 - [ ] **Visualisierung:** Dashboard zur Darstellung der Score-Historie.
 
 ---
