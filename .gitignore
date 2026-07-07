@@ -1,0 +1,16 @@
+# Python Virtual Environment
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs and Run Data (Temporary)
+logs/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
