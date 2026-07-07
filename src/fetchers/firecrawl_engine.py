@@ -62,10 +62,6 @@ class FirecrawlEngine:
         print(f"[+] Successfully retrieved {len(processed_results)} articles with content.")
         return processed_results
 
-    def run_pipeline(self, limit: int = 5):
-        """Synchronous wrapper for the async pipeline to maintain compatibility with main.py."""
-        try:
-            return asyncio.run(self.search_and_scrape(limit=limit))
-        except Exception as e:
-            print(f"[!] Pipeline execution failed: {e}")
-            return []
+    async def run_pipeline(self, limit: int = 5):
+        """Async pipeline method."""
+        return await self.search_and_scrape(limit=limit)
