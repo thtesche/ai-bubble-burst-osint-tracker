@@ -4,7 +4,7 @@
 # This script runs the full E2E pipeline using the local virtual environment.
 
 # 1. Configuration
-# Use absolute path to ensure reliability in cron
+# 1. Configuration
 PROJECT_ROOT="/Users/thtesche/VibeCoding/ai-bubble-burst-osint-tracker"
 VENV_PATH="$PROJECT_ROOT/venv"
 LOG_DIR="$PROJECT_ROOT/logs/runs"
@@ -33,7 +33,7 @@ echo "[*] Running E2E Pipeline script..." | tee -a "$LOG_FILE"
 # Use PYTHONPATH to ensure src is discoverable
 export PYTHONPATH="$PROJECT_ROOT"
 
-python3 "$PROJECT_ROOT/src/core/test_full_pipeline_live.py" 2>&1 | tee -a "$LOG_FILE"
+python3 "$PROJECT_ROOT/src/core/full_pipeline_live.py" 2>&1 | tee -a "$LOG_FILE"
 
 # 4. Cleanup & Result
 EXIT_CODE=$?
