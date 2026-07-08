@@ -27,7 +27,7 @@ class FirecrawlEngine:
                 print(f"[!] Unexpected error during {endpoint}: {e}")
         return None
 
-    async def search_and_scrape(self, limit: int = 5):
+    async def search_and_scrape(self, limit: int = 5, time_filter: str = None):
         """
         Performs a single search call that returns both URLs and their markdown content.
         """
@@ -40,6 +40,9 @@ class FirecrawlEngine:
                 "formats": ["markdown"]
             }
         }
+
+        if time_filter:
+            payload["tbs"] = time_filter
 
         data = await self._call_api("search", payload)
         
@@ -54,7 +57,8 @@ class FirecrawlEngine:
                 processed_results.append({
                     "url": item.get("url"),
                     "title": item.get("title", "No Title"),
-                    "content": content
+                    "markdown": content,  # Ensure 'markdown' key is present for NewsFetcher
+                    "content": content    # Keep 'content' for backward compatibility
                 })
             else:
                 print(f"[!] Item found but no markdown content extracted for: {item.get('url')}")

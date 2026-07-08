@@ -1,5 +1,7 @@
 import sys
 import os
+import sys
+import os
 
 # Add src to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -10,9 +12,7 @@ from src.fetchers.news import NewsFetcher
 from src.fetchers.market import MarketDataFetcher
 from src.core.engine import ScoringEngine
 
-# We require hermes_tools for real data extraction. 
-# If they are missing, the pipeline should fail explicitly.
-from hermes_tools import web_extract, web_search
+# We no longer require hermes_tools as we use Firecrawl directly.
 
 def e2e_test():
     print("=== STARTING REAL E2E TEST (LIVE DATA) ===")
@@ -23,8 +23,9 @@ def e2e_test():
     market_fetcher = MarketDataFetcher(tickers=["NVDA"])
 
     # 2. Real News Fetching
-    print("\n[*] Step 1: Fetching REAL news via web_search/web_extract...")
-    news_contents = news_fetcher.fetch_and_extract()
+    print("\n[*] Step 1: Fetching REAL news via Firecrawl...")
+    import asyncio
+    news_contents = asyncio.run(news_fetcher.fetch_and_extract())
     
     if not news_contents:
         print("[!] ERROR: Failed to fetch real news. Pipeline aborted.")
@@ -35,8 +36,8 @@ def e2e_test():
         print(f"    Article {i+1} length: {len(c)} chars")
 
     # 3. Real Market Fetching
-    print("\n[*] Step 2: Fetching REAL market data via Deep Search (Snippet + Extraction)...")
-    market_metrics = market_fetcher.fetch_market_metrics(web_search_func=web_search, web_extract_func=web_extract)
+    print("\n[*] Step 2: Fetching REAL market data via Firecrawl...")
+    market_metrics = market_fetcher.fetch_market_metrics()
     
     if not market_metrics or all(v['current_price'] == 0.0 for v in market_metrics.values()):
         print("[!] ERROR: Failed to fetch real market data or all prices are zero. Pipeline aborted.")

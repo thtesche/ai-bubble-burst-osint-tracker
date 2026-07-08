@@ -2,8 +2,8 @@ import re
 
 class MarketDataFetcher:
     """
-    Verantwortlich für das Abrufen von Finanzdaten via Search-Snippets & Deep Extraction.
-    Nutzt eine Kaskade: Snippet -> Deep Extraction (web_extract) -> Fallback.
+    Verantwortlich für das Abrufen von Finanzdaten via Firecrawl.
+    Nutzt app.search() mit Zeitfilter, um aktuelle Preise direkt im Markdown zu finden.
     """
     def __init__(self, tickers: list[str], logger=None):
         self.tickers = tickers
@@ -32,55 +32,46 @@ class MarketDataFetcher:
                     continue
         return None
 
-    def fetch_market_metrics(self, web_search_func, web_extract_func) -> dict:
+    def fetch_market_metrics(self, web_search_func=None, web_extract_func=None) -> dict:
         """
-        Nutzt eine Kaskade von Such- und Extraktionsmethoden.
+        Nutzt Firecrawl app.search() für die Suche und Extraktion von Marktdaten.
         """
-        print(f"[*] Fetching market data via Cascade for: {self.tickers}")
+        import asyncio
+        from src.fetchers.firecrawl_engine import FirecrawlEngine
+
+        print(f"[*] Fetching market data via Firecrawl Search for: {self.tickers}")
         results = {}
 
         for ticker in self.tickers:
             print(f"[*] Processing {ticker}...")
             price_found = False
             
-            # 1. Suche nach URLs und Snippets
-            query = f"{ticker} stock price current"
-            search_results = web_search_func(query=query, limit=5)
+            # Wir nutzen Firecrawl, um gezielt nach dem aktuellen Preis zu suchen (Last 24h)
+            query = f"{ticker} stock price current USD"
+            engine = FirecrawlEngine(query=query)
             
-            if "data" in search_results and "web" in search_results["data"]:
-                web_items = search_results["data"]["web"]
-                
-                for item in web_items:
-                    url = item.get("url")
-                    snippet = item.get("description", "")
+            try:
+                # Wir nutzen die neue Search-Funktionalität, die direkt Markdown liefert
+                # WICHTIG: Die Engine nutzt self.query aus dem __init__, daher kein 'query' Argument hier!
+                articles = asyncio.run(engine.search_and_scrape(
+                    limit=3,
+                    time_filter="qdr:d"
+                ))
 
-                    # Versuch A: Preis direkt aus dem Snippet extrahieren (schnell)
-                    price = self._extract_price_from_text(snippet)
-                    
+                for article in articles:
+                    content = article.get('markdown', '')
+                    price = self._extract_price_from_text(content)
                     if price:
-                        print(f"[+] Found {ticker} price in snippet: ${price:.2f}")
+                        print(f"[+] Found {ticker} price via Firecrawl Search: ${price:.2f}")
                         results[ticker] = self._create_metric_dict(price)
                         price_found = True
                         break
-                    
-                    # Versuch B: Deep Extraction der Seite (falls Snippet fehlschlägt)
-                    if url:
-                        print(f"[*] Snippet failed for {ticker}. Attempting Deep Extraction on {url}...")
-                        extraction = web_extract_func(urls=[url])
-                        for res in extraction.get("results", []):
-                            if "error" not in res and res.get("content"):
-                                price = self._extract_price_from_text(res["content"])
-                                if price:
-                                    print(f"[+] Found {ticker} price via Deep Extraction: ${price:.2f}")
-                                    results[ticker] = self._create_metric_dict(price)
-                                    price_found = True
-                                    break
-                        if price_found:
-                            break
+            except Exception as e:
+                print(f"[!] Firecrawl error for {ticker}: {e}")
 
             if not price_found:
                 print(f"[!] All attempts failed for {ticker}. Using neutral fallback.")
-                results[ticker] = self._create_metric_dict(0.0) # Neutraler Wert
+                results[ticker] = self._create_metric_dict(0.0)
 
         return results
 

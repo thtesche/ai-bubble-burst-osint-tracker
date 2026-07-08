@@ -1,16 +1,20 @@
 #!/bin/bash
 
 # AI Bubble Burst OSINT Tracker - Daily Pipeline Runner
-# This script runs the full E2E pipeline using the local virtual environment.
-# 1. Configuration
+# 1. Configuration & Root Detection
 if [ -f .env ]; then
-    export $(grep -v '^#' .env | xargs)
+    set -a
+    source .env
+    set +a
 fi
 
 if [ -z "$PROJECT_ROOT" ]; then
-    echo "[ERROR] PROJECT_ROOT is not set in .env" | tee -a "$LOG_FILE"
-    exit 1
+    PROJECT_ROOT=$(pwd)
 fi
+
+# --- CRITICAL FIX: Clear PYTHONPATH to prevent Hermes-Agent leakage ---
+export PYTHONPATH=""
+# ----------------------------------------------------------------------
 
 VENV_PATH="$PROJECT_ROOT/venv"
 LOG_DIR="$PROJECT_ROOT/logs/runs"
@@ -22,24 +26,27 @@ mkdir -p "$LOG_DIR"
 
 echo "====================================================" | tee -a "$LOG_FILE"
 echo "Starting AI Bubble Burst Pipeline: $TIMESTAMP" | tee -a "$LOG_FILE"
+echo "Project Root: $PROJECT_ROOT" | tee -a "$LOG_FILE"
+echo "Cleaned PYTHONPATH: $PYTHONPATH" | tee -a "$LOG_FILE"
 echo "====================================================" | tee -a "$LOG_FILE"
 
-# 2. Environment Setup
+# 2. Environment Check
 if [ ! -d "$VENV_PATH" ]; then
     echo "[ERROR] Virtual environment not found at $VENV_PATH" | tee -a "$LOG_FILE"
     exit 1
 fi
 
-# Activate venv
-source "$VENV_PATH/bin/activate" || { echo "[ERROR] Failed to activate venv"; exit 1; }
-
 # 3. Execution
 echo "[*] Running E2E Pipeline script..." | tee -a "$LOG_FILE"
 
-# Use PYTHONPATH to ensure src is discoverable
+# Use the absolute path to the venv python interpreter
+PYTHON_EXE="$VENV_PATH/bin/python3"
+
+# Now set PYTHONPATH to ONLY include the project root for module discovery
 export PYTHONPATH="$PROJECT_ROOT"
 
-python3 "$PROJECT_ROOT/src/core/full_pipeline_live.py" 2>&1 | tee -a "$LOG_FILE"
+# Execute and capture output
+"$PYTHON_EXE" "$PROJECT_ROOT/src/core/full_pipeline_live.py" 2>&1 | tee -a "$LOG_FILE"
 
 # 4. Cleanup & Result
 EXIT_CODE=$?
@@ -53,5 +60,4 @@ fi
 echo "Log file: $LOG_FILE" | tee -a "$LOG_FILE"
 echo "====================================================" | tee -a "$LOG_FILE"
 
-deactivate
 exit $EXIT_CODE
