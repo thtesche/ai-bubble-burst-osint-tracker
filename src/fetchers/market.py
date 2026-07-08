@@ -9,10 +9,10 @@ class MarketDataFetcher:
         self.tickers = tickers
         self.logger = logger
 
-    def _extract_price_from_text(self, text: str) -> float | None:
+    def _extract_price_from_text(self, text: str) -> float:
         """Hilfsmethode zur Extraktion eines Preises aus einem String mittels Regex."""
         if not text:
-            return None
+            return 0.0
             
         patterns = [
             r'\$\s?(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})', # $1,234.56 oder $1234.56

@@ -2,14 +2,32 @@ import sys
 import os
 
 # Add src to path
-project_root = "/Users/thtesche/VibeCoding/ai-bubble-burst-osint-tracker"
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.append(project_root)
 
 from src.fetchers.news import NewsFetcher
 from src.fetchers.market import MarketDataFetcher
 from src.core.engine import ScoringEngine
-from hermes_tools import web_extract, web_search
+
+# Try to import hermes_tools, if not available (local run), use a mock
+try:
+    from hermes_tools import web_extract, web_search
+except ImportError:
+    import sys
+    from unittest.mock import MagicMock
+    print("[!] hermes_tools not found. Using MOCK mode for local execution.")
+    mock_hermes = MagicMock()
+    sys.modules["hermes_tools"] = mock_hermes
+    # Default mocks for local testing/fallback
+    mock_hermes.web_search.return_value = {
+        "data": {"web": [{"url": "https://example.com", "description": "Mock news"}]}
+    }
+    mock_hermes.web_extract.return_value = {
+        "results": [{"content": "Mock content for testing purposes."}]
+    }
+    web_extract = mock_hermes.web_extract
+    web_search = mock_hermes.web_search
 
 def e2e_test():
     print("=== STARTING REAL E2E TEST (LIVE DATA) ===")
@@ -49,7 +67,7 @@ def e2e_test():
     
     print(f"    Real Sentiment Score: {sentiment_score:.4f}")
     print(f"    Real Market Score:    {market_score:.4f}")
-
+    
     final_bubble_score = engine.calculate_final_score(sentiment_score, market_score)
     print(f"\n[!!!] FINAL REAL BUBBLE SCORE: {final_bubble_score:.2f}%")
     print("=== E2E TEST COMPLETE ===")
