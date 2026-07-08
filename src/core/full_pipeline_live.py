@@ -10,24 +10,9 @@ from src.fetchers.news import NewsFetcher
 from src.fetchers.market import MarketDataFetcher
 from src.core.engine import ScoringEngine
 
-# Try to import hermes_tools, if not available (local run), use a mock
-try:
-    from hermes_tools import web_extract, web_search
-except ImportError:
-    import sys
-    from unittest.mock import MagicMock
-    print("[!] hermes_tools not found. Using MOCK mode for local execution.")
-    mock_hermes = MagicMock()
-    sys.modules["hermes_tools"] = mock_hermes
-    # Default mocks for local testing/fallback
-    mock_hermes.web_search.return_value = {
-        "data": {"web": [{"url": "https://example.com", "description": "Mock news"}]}
-    }
-    mock_hermes.web_extract.return_value = {
-        "results": [{"content": "Mock content for testing purposes."}]
-    }
-    web_extract = mock_hermes.web_extract
-    web_search = mock_hermes.web_search
+# We require hermes_tools for real data extraction. 
+# If they are missing, the pipeline should fail explicitly.
+from hermes_tools import web_extract, web_search
 
 def e2e_test():
     print("=== STARTING REAL E2E TEST (LIVE DATA) ===")
@@ -42,8 +27,8 @@ def e2e_test():
     news_contents = news_fetcher.fetch_and_extract()
     
     if not news_contents:
-        print("[!] Failed to fetch real news. Check web_search/web_extract availability.")
-        return
+        print("[!] ERROR: Failed to fetch real news. Pipeline aborted.")
+        sys.exit(1)
 
     print(f"[+] Successfully fetched {len(news_contents)} real news articles.")
     for i, c in enumerate(news_contents):
@@ -51,12 +36,11 @@ def e2e_test():
 
     # 3. Real Market Fetching
     print("\n[*] Step 2: Fetching REAL market data via Deep Search (Snippet + Extraction)...")
-    # Pass BOTH web_search and web_extract to the fetcher
     market_metrics = market_fetcher.fetch_market_metrics(web_search_func=web_search, web_extract_func=web_extract)
     
-    if not market_metrics:
-        print("[!] Failed to fetch real market data.")
-        return
+    if not market_metrics or all(v['current_price'] == 0.0 for v in market_metrics.values()):
+        print("[!] ERROR: Failed to fetch real market data or all prices are zero. Pipeline aborted.")
+        sys.exit(1)
 
     print(f"[+] Successfully fetched market metrics: {market_metrics}")
 
