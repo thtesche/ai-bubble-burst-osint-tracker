@@ -39,16 +39,46 @@ source venv/bin/activate
 pip install yfinance pandas
 ```
 
-### 2. Ausführung (Manuell)
+### 2. Konfiguration (.env)
+Das Projekt nutzt eine `.env` Datei für lokale Pfade und Geheimnisse. Kopiere die Beispiel-Datei und passe den Pfad an deine Umgebung an:
+```bash
+cp .env.example .env
+# Bearbeite die .env Datei und setze PROJECT_ROOT auf deinen absoluten Pfad
+nano .env 
+```
+
+### 3. Ausführung (Manuell)
 Um den gesamten Prozess inklusive echter Daten zu testen, nutze die Hermes-Runtime (da diese die `hermes_tools` bereitstellt):
 ```bash
-# Führe den E2E-Test in der Hermes-Umgebung aus
-execute_code "import sys; sys.path.append('/Users/thtesche/VibeCoding/ai-bubble-burst-osint-tracker'); from src.core.test_full_pipeline_live import e2e_test; e2e_test()"
+execute_code "import sys; sys.path.append('/path/to/your/project'); from src.core.full_pipeline_live import e2e_test; e2e_test()"
 ```
+
+### 4. Automatisierung (Cronjob)
+Für den täglichen automatisierten Lauf ohne Hermes-Runtime wird das lokale Skript `daily_report.sh` verwendet. Dieses nutzt das lokale `venv` und bricht bei fehlenden Daten oder Tools sauber ab (Fail-Fast).
+
+**Cronjob Setup:**
+1. Stelle sicher, dass das Skript ausführbar ist: `chmod +x daily_report.sh`
+2. Öffne die Crontab: `crontab -e`
+3. Füge folgenden Eintrag hinzu (Beispiel für täglicher Lauf um 08:00 Uhr):
+```cron
+0 8 * * * /path/to/your/project/daily_report.sh >> /path/to/your/project/cron_output.log 2>&1
+```
+
+*Hinweis: Das Skript loggt alle Details zusätzlich in `logs/runs/`.*
 
 ## 📈 Roadmap (V2)
 - [ ] **Echte API-Anbindung:** Ersetzung des Scrapings durch professionelle Finanz-APIs (z.B. *Alpha Vantage* oder *Polygon.io*).
-- [ ] **Automatisierung:** Einrichtung eines Hermes Cronjobs für tägliche Telegram-Reports.
+- [ ] **Erweiterte Datenquellen:** Integration von Krypto-Daten und VC-Funding-News.
+- [ ] **Visualisierung:** Dashboard zur Darstellung der Score-Historie.
+
+```cron
+0 8 * * * /path/to/your/project/daily_report.sh >> /path/to/your/project/cron_output.log 2>&1
+```
+
+*Hinweis: Das Skript loggt alle Details zusätzlich in `logs/runs/`.*
+
+## 📈 Roadmap (V2)
+- [ ] **Echte API-Anbindung:** Ersetzung des Scrapings durch professionelle Finanz-APIs (z.B. *Alpha Vantage* oder *Polygon.io*).
 - [ ] **Erweiterte Datenquellen:** Integration von Krypto-Daten und VC-Funding-News.
 - [ ] **Visualisierung:** Dashboard zur Darstellung der Score-Historie.
 

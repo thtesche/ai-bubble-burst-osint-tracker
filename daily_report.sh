@@ -2,10 +2,16 @@
 
 # AI Bubble Burst OSINT Tracker - Daily Pipeline Runner
 # This script runs the full E2E pipeline using the local virtual environment.
+# 1. Configuration
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
 
-# 1. Configuration
-# 1. Configuration
-PROJECT_ROOT="/Users/thtesche/VibeCoding/ai-bubble-burst-osint-tracker"
+if [ -z "$PROJECT_ROOT" ]; then
+    echo "[ERROR] PROJECT_ROOT is not set in .env" | tee -a "$LOG_FILE"
+    exit 1
+fi
+
 VENV_PATH="$PROJECT_ROOT/venv"
 LOG_DIR="$PROJECT_ROOT/logs/runs"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
