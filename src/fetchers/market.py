@@ -26,7 +26,7 @@ class MarketDataFetcher:
                 try:
                     price_str = match.group(1).replace(',', '')
                     val = float(price_str)
-                    if val > 0.1: # Plausibilitätscheck
+                    if val >= 0.0: # Allow zero for completeness, or keep > 0.1 if strictly positive
                         return val
                 except ValueError:
                     continue
@@ -34,11 +34,11 @@ class MarketDataFetcher:
 
     def fetch_market_metrics(self, web_search_func=None, web_extract_func=None) -> dict:
         """
-        Nutzt Firecrawl app.search() für die Suche und Extraktion von Marktdaten.
+        Nutzt Firecrawl, um gezielt nach dem aktuellen Preis zu suchen (Last 24h).
         """
         import asyncio
         from src.fetchers.firecrawl_engine import FirecrawlEngine
-
+        
         print(f"[*] Fetching market data via Firecrawl Search for: {self.tickers}")
         results = {}
 
@@ -52,14 +52,14 @@ class MarketDataFetcher:
             
             try:
                 # Wir nutzen die neue Search-Funktionalität, die direkt Markdown liefert
-                # WICHTIG: Die Engine nutzt self.query aus dem __init__, daher kein 'query' Argument hier!
                 articles = asyncio.run(engine.search_and_scrape(
                     limit=3,
                     time_filter="qdr:d"
                 ))
 
                 for article in articles:
-                    content = article.get('markdown', '')
+                    # Firecrawl search_and_scrape returns list of dicts with 'markdown' or 'content'
+                    content = article.get('markdown') or article.get('content', '')
                     price = self._extract_price_from_text(content)
                     if price:
                         print(f"[+] Found {ticker} price via Firecrawl Search: ${price:.2f}")

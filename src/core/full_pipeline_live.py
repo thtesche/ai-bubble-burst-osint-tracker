@@ -12,25 +12,44 @@ from src.fetchers.news import NewsFetcher
 from src.fetchers.market import MarketDataFetcher
 from src.core.engine import ScoringEngine
 
-# We no longer require hermes_tools as we use Firecrawl directly.
-
 def e2e_test():
-    print("=== STARTING REAL E2E TEST (LIVE DATA) ===")
+    print("=== STARTING LIVE DATA ===")
     
     # 1. Setup
     engine = ScoringEngine()
-    news_fetcher = NewsFetcher(query="AI bubble market news", limit=3)
+    news_fetcher = NewsFetcher(query="Is the AI bubble about to burst", limit=10)
     market_fetcher = MarketDataFetcher(tickers=["NVDA"])
 
     # 2. Real News Fetching
     print("\n[*] Step 1: Fetching REAL news via Firecrawl...")
     import asyncio
-    news_contents = asyncio.run(news_fetcher.fetch_and_extract())
+    import json
+    import os
+    from datetime import datetime
+
+    news_data = asyncio.run(news_fetcher.fetch_and_extract())
     
-    if not news_contents:
+    if not news_data:
         print("[!] ERROR: Failed to fetch real news. Pipeline aborted.")
         sys.exit(1)
 
+    # Save raw news to JSON for quality inspection
+    # Wir berechnen den Root relativ zu dieser Datei (2 Ebenen hoch von src/core/)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    actual_root = os.path.dirname(os.path.dirname(current_dir))
+    log_dir = os.path.join(actual_root, "logs", "runs")
+    
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    news_json_path = os.path.join(log_dir, f"news_raw_{timestamp}.json")
+    
+    with open(news_json_path, "w", encoding="utf-8") as f:
+        json.dump(news_data, f, indent=4, ensure_ascii=False)
+    print(f"[+] Raw news data saved to: {news_json_path}")
+
+    # Extract contents for the scoring engine (which expects list[str])
+    news_contents = [article['content'] for article in news_data]
+    
     print(f"[+] Successfully fetched {len(news_contents)} real news articles.")
     for i, c in enumerate(news_contents):
         print(f"    Article {i+1} length: {len(c)} chars")

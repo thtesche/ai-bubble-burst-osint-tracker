@@ -10,28 +10,32 @@ class NewsFetcher:
         from src.fetchers.firecrawl_engine import FirecrawlEngine
         self.firecrawl = FirecrawlEngine(query=self.base_query)
 
-    async def fetch_and_extract(self) -> list[str]:
+    async def fetch_and_extract(self) -> list[dict]:
         print(f"[*] Starting Firecrawl News Search (Last 24h) for: {self.base_query}")
         
         try:
-            # Wir nutzen die neue Search-Funktionalität, die direkt Markdown liefert
-            # WICHTIG: Die Engine nutzt self.query aus dem __init__, daher kein 'query' Argument hier!
             articles = await self.firecrawl.search_and_scrape(
                 limit=self.limit,
                 time_filter="qdr:d"
             )
             
-            extracted_contents = [a['markdown'] for a in articles if a.get('markdown')]
+            processed_articles = []
+            for article in articles:
+                content = article.get('markdown', '')
+                if not content:
+                    continue
+
+                processed_articles.append({
+                    'title': article.get('title'),
+                    'url': article.get('url'),
+                    'content': content
+                })
             
-            if self.logger:
-                for i, content in enumerate(extracted_contents):
-                    self.logger.save_content("news", f"firecrawl_{i}", content)
-            
-            return extracted_contents
+            return processed_articles
         except Exception as e:
             print(f"[!] Firecrawl search failed: {e}")
             return []
 
-    def fetch_and_extract_sync(self) -> list[str]:
+    def fetch_and_extract_sync(self) -> list[dict]:
         import asyncio
         return asyncio.run(self.fetch_and_extract())
