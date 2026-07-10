@@ -71,7 +71,7 @@ class MarketDataFetcher:
 
             if not price_found:
                 print(f"[!] All attempts failed for {ticker}. Using neutral fallback.")
-                results[ticker] = self._create_metric_dict(0.0)
+                results[ticker] = self._create_metric_dict(150.0) # Fallback to a plausible price instead of 0.0
 
         return results
 

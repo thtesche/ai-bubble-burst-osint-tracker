@@ -11,7 +11,7 @@ class NewsFetcher:
         self.firecrawl = FirecrawlEngine(query=self.base_query)
 
     async def fetch_and_extract(self) -> list[dict]:
-        print(f"[*] Starting Firecrawl News Search (Last 24h) for: {self.base_query}")
+        print(f"[*] Starting Firecrawl News Search for: {self.base_query}")
         
         try:
             articles = await self.firecrawl.search_and_scrape(
@@ -21,7 +21,7 @@ class NewsFetcher:
             
             processed_articles = []
             for article in articles:
-                content = article.get('markdown', '')
+                content = article.get('markdown', '') or article.get('content', '')
                 if not content:
                     continue
 
