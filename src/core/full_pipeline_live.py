@@ -9,6 +9,7 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 from src.fetchers.news import NewsFetcher
+from src.fetchers.googlenews import GoogleNewsFetcher
 from src.fetchers.market import MarketDataFetcher
 from src.core.engine import ScoringEngine
 
@@ -18,9 +19,12 @@ def e2e_test():
     # 1. Setup
     engine = ScoringEngine()
     news_fetcher = NewsFetcher(query="Is the AI bubble about to burst", limit=10)
+    googlenews_fetcher = GoogleNewsFetcher(
+        query="Is the AI bubble about to burst", limit=10, use_firecrawl=False
+    )
     market_fetcher = MarketDataFetcher(tickers=["NVDA"])
 
-    # 2. Real News Fetching
+    # 2. Real News Fetching (Firecrawl)
     print("\n[*] Step 1: Fetching REAL news via Firecrawl...")
     import asyncio
     import json
@@ -54,6 +58,38 @@ def e2e_test():
     for i, c in enumerate(news_contents):
         print(f"    Article {i+1} length: {len(c)} chars")
 
+    # 2b. Google News Fetching (parallel)
+    print("\n[*] Step 1b: Fetching REAL news via Google News RSS...")
+    googlenews_data = googlenews_fetcher.fetch_articles_sync()
+    
+    googlenews_articles = googlenews_data.get("articles", [])
+    googlenews_total = googlenews_data.get("total_results", 0)
+    googlenews_contents = [
+        a.get("content", a.get("description", ""))
+        for a in googlenews_articles
+    ]
+    
+    print(
+        f"[+] Google News: {len(googlenews_articles)} articles "
+        f"(total 24h results: {googlenews_total})"
+    )
+    
+    # Google News Ergebnisse speichern
+    googlenews_json_path = os.path.join(
+        log_dir, f"googlenews_raw_{timestamp}.json"
+    )
+    with open(googlenews_json_path, "w", encoding="utf-8") as f:
+        json.dump(googlenews_data, f, indent=4, ensure_ascii=False)
+    print(f"[+] Google News data saved to: {googlenews_json_path}")
+    
+    # Contents für die Analyse zusammenführen
+    all_news_contents = news_contents + googlenews_contents
+    print(
+        f"[+] Total news articles for analysis: "
+        f"{len(all_news_contents)} "
+        f"({len(news_contents)} Firecrawl + {len(googlenews_contents)} Google News)"
+    )
+
     # 3. Real Market Fetching
     print("\n[*] Step 2: Fetching REAL market data via Firecrawl...")
     market_metrics = market_fetcher.fetch_market_metrics()
@@ -64,9 +100,9 @@ def e2e_test():
 
     print(f"[+] Successfully fetched market metrics: {market_metrics}")
 
-    # 4. Scoring
+    # 4. Scoring (mit combined news from both sources)
     print("\n[*] Step 3: Calculating REAL score...")
-    sentiment_score = engine.analyze_sentiment(news_contents)
+    sentiment_score = engine.analyze_sentiment(all_news_contents)
     market_score = market_fetcher.calculate_market_score(market_metrics)
     
     print(f"    Real Sentiment Score: {sentiment_score:.4f}")
