@@ -37,7 +37,8 @@ class FirecrawlEngine:
             "query": self.query,
             "limit": limit,
             "scrapeOptions": {
-                "formats": ["markdown"]
+                "formats": ["markdown"],
+                "maxAge": 2592000000  # 1 month in milliseconds (30 days)
             }
         }
 
