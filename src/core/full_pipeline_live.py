@@ -1,5 +1,9 @@
 import sys
 import os
+import asyncio
+import json
+from datetime import datetime
+from typing import Optional
 
 # Add project root (parent of src/) to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,51 +15,125 @@ from src.fetchers.googlenews import GoogleNewsFetcher
 from src.fetchers.market import MarketDataFetcher
 from src.core.engine import ScoringEngine
 
-def e2e_test():
+
+def _generate_report(final_bubble_score: float, sentiment_score: float,
+                     market_score: float, capex_score: float,
+                     news_data: list, googlenews_data: dict,
+                     market_metrics: dict, capex_data: dict) -> str:
+    """Formats the final findings into a professional report."""
+    report = "### 🫧 AI Bubble Burst Report\n"
+    report += f"**Current Bubble Score: {final_bubble_score:.1f}%**\n\n"
+
+    # Risk Assessment
+    if final_bubble_score >= 70:
+        status, desc = "🔴 **CRITICAL RISK**", "Extreme signs of overheating and speculative mania."
+    elif final_bubble_score >= 40:
+        status, desc = "🟡 **MODERATE RISK**", "Mixed signals. Significant hype is present, but some fundamental caution remains."
+    else:
+        status, desc = "🟢 **LOW RISK**", "Market sentiment appears stable or grounded."
+
+    report += f"**Status: {status}**\n"
+    report += f"{desc}\n\n"
+
+    # Scores breakdown
+    report += "**📊 Score Breakdown:**\n"
+    report += f"- Sentiment Score (News): {sentiment_score:.2f}\n"
+    report += f"- Market Score (Prices):  {market_score:.2f}\n"
+    report += f"- CapEx Score (Investments): {capex_score:.2f}\n\n"
+
+    # Market Data
+    if market_metrics:
+        report += "**📈 Market Data:**\n"
+        for ticker, data in market_metrics.items():
+            report += f"- **{ticker}**: ${data['current_price']:.2f} (daily: {data['daily_change_pct']:+.2f}%, 5d: {data['five_day_change_pct']:+.2f}%)\n"
+        report += "\n"
+
+    # CapEx Data
+    if capex_data:
+        report += "**💰 CapEx Summary:**\n"
+        for ticker, data in capex_data.items():
+            quarterly = data.get("quarterly_capex", {})
+            if quarterly:
+                sorted_q = sorted(quarterly.keys(), reverse=True)[:3]
+                latest_vals = [abs(float(quarterly[q])) for q in sorted_q]
+                report += f"- **{ticker}**: Latest 3 quarters: {', '.join(f'{v:.0f}' for v in latest_vals)}\n"
+        report += "\n"
+
+    # News Analysis (Firecrawl)
+    if news_data and len(news_data) > 0:
+        report += "**📰 Latest News (Firecrawl):**\n"
+        for article in news_data:
+            title = article.get('title', 'No Title')
+            url = article.get('url', '#')
+            report += f"- [{title}]({url})\n"
+        report += "\n"
+
+    # Google News
+    googlenews_articles = googlenews_data.get("articles", [])
+    if googlenews_articles:
+        report += "**📰 Google News (24h):**\n"
+        for article in googlenews_articles:
+            title = article.get("title", "No Title")
+            link = article.get("link", "#")
+            report += f"- [{title}]({link})\n"
+        report += "\n"
+
+    report += f"*Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n"
+
+    return report
+
+
+async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2026",
+                       limit: int = 5,
+                       tickers: list[str] = None) -> str:
+    """
+    Full E2E pipeline: fetches news (Firecrawl + Google News), market data,
+    calculates scores, and returns a formatted report string.
+
+    Does NOT send to Telegram — that is the caller's responsibility.
+
+    Returns:
+        str: Markdown-formatted report ready for delivery.
+    """
+    if tickers is None:
+        tickers = ["MSFT", "GOOGL", "AMZN", "META", "NVDA",
+                    "AMD", "ASML", "AVGO", "MU", "DELL",
+                    "SMCI", "HPE"]
+
     print("=== STARTING LIVE DATA ===")
-    
+
     # 1. Setup
     engine = ScoringEngine()
-    news_fetcher = NewsFetcher(query="Is the AI bubble about to burst", limit=10)
+    news_fetcher = NewsFetcher(query=query, limit=limit)
     googlenews_fetcher = GoogleNewsFetcher(
-        query="Is the AI bubble about to burst", limit=10, use_firecrawl=False
+        query=query, limit=10, use_firecrawl=False
     )
-    market_fetcher = MarketDataFetcher(tickers=[
-        "MSFT", "GOOGL", "AMZN", "META", "NVDA",
-        "AMD", "ASML", "AVGO", "MU", "DELL",
-        "SMCI", "HPE"
-    ])
+    market_fetcher = MarketDataFetcher(tickers=tickers)
 
     # 2. Real News Fetching (Firecrawl)
     print("\n[*] Step 1: Fetching REAL news via Firecrawl...")
-    import asyncio
-    import json
-    import os
-    from datetime import datetime
+    news_data = await news_fetcher.fetch_and_extract()
 
-    news_data = asyncio.run(news_fetcher.fetch_and_extract())
-    
     if not news_data:
         print("[!] ERROR: Failed to fetch real news. Pipeline aborted.")
         sys.exit(1)
 
     # Save raw news to JSON for quality inspection
-    # Wir berechnen den Root relativ zu dieser Datei (2 Ebenen hoch von src/core/)
     current_dir = os.path.dirname(os.path.abspath(__file__))
     actual_root = os.path.dirname(os.path.dirname(current_dir))
     log_dir = os.path.join(actual_root, "logs", "runs")
-    
+
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     news_json_path = os.path.join(log_dir, f"news_raw_{timestamp}.json")
-    
+
     with open(news_json_path, "w", encoding="utf-8") as f:
         json.dump(news_data, f, indent=4, ensure_ascii=False)
     print(f"[+] Raw news data saved to: {news_json_path}")
 
     # Extract contents for the scoring engine (which expects list[str])
     news_contents = [article['content'] for article in news_data]
-    
+
     print(f"[+] Successfully fetched {len(news_contents)} real news articles.")
     for i, c in enumerate(news_contents):
         print(f"    Article {i+1} length: {len(c)} chars")
@@ -63,19 +141,19 @@ def e2e_test():
     # 2b. Google News Fetching (parallel)
     print("\n[*] Step 1b: Fetching REAL news via Google News RSS...")
     googlenews_data = googlenews_fetcher.fetch_articles_sync()
-    
+
     googlenews_articles = googlenews_data.get("articles", [])
     googlenews_total = googlenews_data.get("total_results", 0)
     googlenews_contents = [
         a.get("content", a.get("description", ""))
         for a in googlenews_articles
     ]
-    
+
     print(
         f"[+] Google News: {len(googlenews_articles)} articles "
         f"(total 24h results: {googlenews_total})"
     )
-    
+
     # Google News Ergebnisse speichern
     googlenews_json_path = os.path.join(
         log_dir, f"googlenews_raw_{timestamp}.json"
@@ -83,7 +161,7 @@ def e2e_test():
     with open(googlenews_json_path, "w", encoding="utf-8") as f:
         json.dump(googlenews_data, f, indent=4, ensure_ascii=False)
     print(f"[+] Google News data saved to: {googlenews_json_path}")
-    
+
     # Contents für die Analyse zusammenführen
     all_news_contents = news_contents + googlenews_contents
     print(
@@ -98,8 +176,6 @@ def e2e_test():
 
     if not market_metrics:
         print("[!] WARNING: No market data available. Continuing with news-only analysis.")
-    else:
-        print(f"[+] Successfully fetched market metrics: {market_metrics}")
 
     # 3b. CapEx Fetching (Investitionsausgaben der Hyperscaler)
     print("\n[*] Step 2b: Fetching REAL CapEx data via yfinance...")
@@ -128,6 +204,22 @@ def e2e_test():
     )
     print(f"\n[!!!] FINAL REAL BUBBLE SCORE: {final_bubble_score:.2f}%")
     print("=== E2E TEST COMPLETE ===")
+
+    # 5. Generate Report
+    report = _generate_report(
+        final_bubble_score, sentiment_score, market_score, capex_score,
+        news_data, googlenews_data, market_metrics, capex_data
+    )
+
+    return report
+
+
+def e2e_test():
+    """Legacy entry point — runs pipeline and prints report."""
+    report = asyncio.run(run_pipeline())
+    print("\n--- FINAL REPORT ---")
+    print(report)
+
 
 if __name__ == "__main__":
     e2e_test()

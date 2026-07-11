@@ -46,7 +46,7 @@ PYTHON_EXE="$VENV_PATH/bin/python3"
 export PYTHONPATH="$PROJECT_ROOT"
 
 # Execute and capture output
-"$PYTHON_EXE" "$PROJECT_ROOT/src/core/full_pipeline_live.py" 2>&1 | tee -a "$LOG_FILE"
+"$PYTHON_EXE" "$PROJECT_ROOT/src/main.py" 2>&1 | tee -a "$LOG_FILE"
 
 # 4. Cleanup & Result
 EXIT_CODE=$?
