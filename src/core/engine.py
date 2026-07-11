@@ -40,10 +40,10 @@ class ScoringEngine:
         score = (total_hits / total_words) * 100
         return min(score, 1.0)
 
-    def calculate_final_score(self, sentiment_score: float, market_score: float) -> float:
+    def calculate_final_score(self, sentiment_score: float, market_score: float, capex_score: float = 0.5) -> float:
         """
         Kombiniert die Scores zu einem finalen 0-100% Wert.
+        Gewichtung: 40% Sentiment, 20% Market, 40% CapEx (für MVP).
         """
-        # Gewichtung: 60% Sentiment, 40% Market (für MVP)
-        combined = (sentiment_score * 0.6) + (market_score * 0.4)
+        combined = (sentiment_score * 0.4) + (market_score * 0.2) + (capex_score * 0.4)
         return combined * 100

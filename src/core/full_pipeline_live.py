@@ -92,7 +92,7 @@ def e2e_test():
         f"({len(news_contents)} Firecrawl + {len(googlenews_contents)} Google News)"
     )
 
-    # 3. Real Market Fetching
+    # 3. Real Market Fetching (prices + CapEx)
     print("\n[*] Step 2: Fetching REAL market data via yfinance...")
     market_metrics = market_fetcher.fetch_market_metrics()
 
@@ -101,15 +101,31 @@ def e2e_test():
     else:
         print(f"[+] Successfully fetched market metrics: {market_metrics}")
 
+    # 3b. CapEx Fetching (Investitionsausgaben der Hyperscaler)
+    print("\n[*] Step 2b: Fetching REAL CapEx data via yfinance...")
+    capex_data = market_fetcher.fetch_capex_data()
+
+    capex_score = market_fetcher.calculate_capex_score(capex_data)
+
+    if capex_data:
+        print(f"[+] Successfully fetched CapEx data for {len(capex_data)} tickers")
+        print(f"    CapEx Score (bubble risk): {capex_score:.4f}")
+    else:
+        print("[!] WARNING: No CapEx data available. Score defaults to neutral (0.5).")
+        capex_score = 0.5
+
     # 4. Scoring (mit combined news from both sources)
     print("\n[*] Step 3: Calculating REAL score...")
     sentiment_score = engine.analyze_sentiment(all_news_contents)
     market_score = market_fetcher.calculate_market_score(market_metrics)
-    
+
     print(f"    Real Sentiment Score: {sentiment_score:.4f}")
     print(f"    Real Market Score:    {market_score:.4f}")
-    
-    final_bubble_score = engine.calculate_final_score(sentiment_score, market_score)
+    print(f"    CapEx Score:          {capex_score:.4f}")
+
+    final_bubble_score = engine.calculate_final_score(
+        sentiment_score, market_score, capex_score
+    )
     print(f"\n[!!!] FINAL REAL BUBBLE SCORE: {final_bubble_score:.2f}%")
     print("=== E2E TEST COMPLETE ===")
 
