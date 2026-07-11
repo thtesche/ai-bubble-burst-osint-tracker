@@ -26,7 +26,7 @@ class MarketDataFetcher:
     def fetch_market_metrics(self) -> dict:
         """
         Holt aktuelle Preise und 5-Tages-Change über yfinance.
-        Wirft ValueError, wenn ein Ticker nicht aufgelöst werden kann.
+        Fehlgeschlagene Ticker werden übersprungen (kein Fake, kein Absturz).
         """
         self._ensure_yfinance_import()
 
@@ -35,6 +35,7 @@ class MarketDataFetcher:
 
         print(f"[*] Fetching market data via yfinance for: {self.tickers}")
         results = {}
+        failed = []
 
         for ticker in self.tickers:
             print(f"[*] Processing {ticker}...")
@@ -69,7 +70,12 @@ class MarketDataFetcher:
 
             except Exception as e:
                 print(f"[!] Fehler bei {ticker}: {e}")
-                raise ValueError(f"Market data retrieval fehlgeschlagen für {ticker}: {e}")
+                failed.append((ticker, str(e)))
+
+        if failed:
+            print(f"[!] {len(failed)} Ticker konnten nicht abgerufen werden:")
+            for t, err in failed:
+                print(f"    - {t}: {err}")
 
         return results
 

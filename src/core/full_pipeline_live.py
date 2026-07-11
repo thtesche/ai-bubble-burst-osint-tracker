@@ -1,10 +1,8 @@
 import sys
 import os
-import sys
-import os
 
-# Add src to path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Add project root (parent of src/) to path
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if project_root not in sys.path:
     sys.path.append(project_root)
 
@@ -22,7 +20,11 @@ def e2e_test():
     googlenews_fetcher = GoogleNewsFetcher(
         query="Is the AI bubble about to burst", limit=10, use_firecrawl=False
     )
-    market_fetcher = MarketDataFetcher(tickers=["NVDA"])
+    market_fetcher = MarketDataFetcher(tickers=[
+        "MSFT", "GOOGL", "AMZN", "META", "NVDA",
+        "AMD", "ASML", "AVGO", "MU", "DELL",
+        "SMCI", "HPE"
+    ])
 
     # 2. Real News Fetching (Firecrawl)
     print("\n[*] Step 1: Fetching REAL news via Firecrawl...")
@@ -91,14 +93,13 @@ def e2e_test():
     )
 
     # 3. Real Market Fetching
-    print("\n[*] Step 2: Fetching REAL market data via Firecrawl...")
+    print("\n[*] Step 2: Fetching REAL market data via yfinance...")
     market_metrics = market_fetcher.fetch_market_metrics()
-    
-    if not market_metrics or all(v['current_price'] == 0.0 for v in market_metrics.values()):
-        print("[!] ERROR: Failed to fetch real market data or all prices are zero. Pipeline aborted.")
-        sys.exit(1)
 
-    print(f"[+] Successfully fetched market metrics: {market_metrics}")
+    if not market_metrics:
+        print("[!] WARNING: No market data available. Continuing with news-only analysis.")
+    else:
+        print(f"[+] Successfully fetched market metrics: {market_metrics}")
 
     # 4. Scoring (mit combined news from both sources)
     print("\n[*] Step 3: Calculating REAL score...")
