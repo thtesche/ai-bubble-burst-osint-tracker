@@ -10,10 +10,13 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-from src.fetchers.news import NewsFetcher
 from src.fetchers.googlenews import GoogleNewsFetcher
 from src.fetchers.market import MarketDataFetcher
 from src.core.engine import ScoringEngine
+
+class PipelineError(Exception):
+    """Raised when the pipeline cannot proceed due to missing or invalid data."""
+    pass
 
 
 def _generate_report(final_bubble_score: float, sentiment_score: float,
@@ -85,15 +88,21 @@ def _generate_report(final_bubble_score: float, sentiment_score: float,
 
 async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2026",
                        limit: int = 5,
-                       tickers: list[str] = None) -> str:
+                       tickers: list[str] = None,
+                       googlenews_fetcher: Optional[GoogleNewsFetcher] = None,
+                       market_fetcher: Optional[MarketDataFetcher] = None) -> str:
     """
-    Full E2E pipeline: fetches news (Firecrawl + Google News), market data,
+    Full E2E pipeline: fetches news (Google News), market data,
     calculates scores, and returns a formatted report string.
 
-    Does NOT send to Telegram — that is the caller's responsibility.
+    Uses Dependency Injection for fetchers to allow easier testing.
+    If no fetchers are provided, default instances are created.
 
     Returns:
         str: Markdown-formatted report ready for delivery.
+    
+    Raises:
+        PipelineError: if critical data fetching fails.
     """
     if tickers is None:
         tickers = ["MSFT", "GOOGL", "AMZN", "META", "NVDA",
@@ -102,85 +111,55 @@ async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2
 
     print("=== STARTING LIVE DATA ===")
 
-    # 1. Setup
+    # 1. Setup (Dependency Injection)
     engine = ScoringEngine()
-    news_fetcher = NewsFetcher(query=query, limit=limit)
-    googlenews_fetcher = GoogleNewsFetcher(
-        query=query, limit=10, use_firecrawl=False
-    )
-    market_fetcher = MarketDataFetcher(tickers=tickers)
+    
+    if googlenews_fetcher is None:
+        googlenews_fetcher = GoogleNewsFetcher(query=query, limit=10)
+        
+    if market_fetcher is None:
+        market_fetcher = MarketDataFetcher(tickers=tickers)
 
-    # 2. Real News Fetching (Firecrawl)
-    print("\n[*] Step 1: Fetching REAL news via Firecrawl...")
-    news_data = await news_fetcher.fetch_and_extract()
+    # 2. Google News Fetching
+    print("\n[*] Step 1: Fetching news via Google News RSS...")
+    googlenews_data = googlenews_fetcher.fetch_articles()
 
-    if not news_data:
-        print("[!] ERROR: Failed to fetch real news. Pipeline aborted.")
-        sys.exit(1)
-
-    # Save raw news to JSON for quality inspection
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    actual_root = os.path.dirname(os.path.dirname(current_dir))
-    log_dir = os.path.join(actual_root, "logs", "runs")
-
-    os.makedirs(log_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    news_json_path = os.path.join(log_dir, f"news_raw_{timestamp}.json")
-
-    with open(news_json_path, "w", encoding="utf-8") as f:
-        json.dump(news_data, f, indent=4, ensure_ascii=False)
-    print(f"[+] Raw news data saved to: {news_json_path}")
-
-    # Extract contents for the scoring engine (which expects list[str])
-    news_contents = [article['content'] for article in news_data]
-
-    print(f"[+] Successfully fetched {len(news_contents)} real news articles.")
-    for i, c in enumerate(news_contents):
-        print(f"    Article {i+1} length: {len(c)} chars")
-
-    # 2b. Google News Fetching (parallel)
-    print("\n[*] Step 1b: Fetching REAL news via Google News RSS...")
-    googlenews_data = googlenews_fetcher.fetch_articles_sync()
+    if not googlenews_data or not googlenews_data.get("articles"):
+        raise PipelineError("Failed to fetch Google News articles. Pipeline aborted.")
 
     googlenews_articles = googlenews_data.get("articles", [])
     googlenews_total = googlenews_data.get("total_results", 0)
+    
+    # Extract contents for the scoring engine
     googlenews_contents = [
         a.get("content", a.get("description", ""))
         for a in googlenews_articles
     ]
 
-    print(
-        f"[+] Google News: {len(googlenews_articles)} articles "
-        f"(total 24h results: {googlenews_total})"
-    )
+    print(f"[+] Google News: {len(googlenews_articles)} articles (total 24h results: {googlenews_total})")
 
-    # Google News Ergebnisse speichern
-    googlenews_json_path = os.path.join(
-        log_dir, f"googlenews_raw_{timestamp}.json"
-    )
+    # Save Google News to JSON for quality inspection
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    actual_root = os.path.dirname(os.path.dirname(current_dir))
+    log_dir = os.path.join(actual_root, "logs", "runs")
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    googlenews_json_path = os.path.join(log_dir, f"googlenews_raw_{timestamp}.json")
+
     with open(googlenews_json_path, "w", encoding="utf-8") as f:
         json.dump(googlenews_data, f, indent=4, ensure_ascii=False)
     print(f"[+] Google News data saved to: {googlenews_json_path}")
 
-    # Contents für die Analyse zusammenführen
-    all_news_contents = news_contents + googlenews_contents
-    print(
-        f"[+] Total news articles for analysis: "
-        f"{len(all_news_contents)} "
-        f"({len(news_contents)} Firecrawl + {len(googlenews_contents)} Google News)"
-    )
-
     # 3. Real Market Fetching (prices + CapEx)
-    print("\n[*] Step 2: Fetching REAL market data via yfinance...")
+    print("\n[*] Step 2: Fetching market data via yfinance...")
     market_metrics = market_fetcher.fetch_market_metrics()
 
     if not market_metrics:
         print("[!] WARNING: No market data available. Continuing with news-only analysis.")
 
-    # 3b. CapEx Fetching (Investitionsausgaben der Hyperscaler)
-    print("\n[*] Step 2b: Fetching REAL CapEx data via yfinance...")
+    # 3b. CapEx Fetching
+    print("\n[*] Step 2b: Fetching CapEx data via yfinance...")
     capex_data = market_fetcher.fetch_capex_data()
-
     capex_score = market_fetcher.calculate_capex_score(capex_data)
 
     if capex_data:
@@ -190,9 +169,9 @@ async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2
         print("[!] WARNING: No CapEx data available. Score defaults to neutral (0.5).")
         capex_score = 0.5
 
-    # 4. Scoring (mit combined news from both sources)
+    # 4. Scoring
     print("\n[*] Step 3: Calculating REAL score...")
-    sentiment_score = engine.analyze_sentiment(all_news_contents)
+    sentiment_score = engine.analyze_sentiment(googlenews_contents)
     market_score = market_fetcher.calculate_market_score(market_metrics)
 
     print(f"    Real Sentiment Score: {sentiment_score:.4f}")
@@ -208,10 +187,11 @@ async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2
     # 5. Generate Report
     report = _generate_report(
         final_bubble_score, sentiment_score, market_score, capex_score,
-        news_data, googlenews_data, market_metrics, capex_data
+        [], googlenews_data, market_metrics, capex_data
     )
 
     return report
+
 
 
 def e2e_test():

@@ -165,10 +165,14 @@ class GoogleNewsFetcher:
             f"(total 24h results: {total_results})"
         )
 
-        # URLs mit Firecrawl scrapen, wenn Engine verfügbar und use_firecrawl=True
-        if raw_urls and self.use_firecrawl and self.firecrawl is None:
-            from src.fetchers.firecrawl_engine import FirecrawlEngine
-            self.firecrawl = FirecrawlEngine(query=self.query)
+        # URLs mit Firecrawl scrapen, wenn Firecrawl verfügbar und use_firecrawl=True
+        if raw_urls and self.use_firecrawl:
+            try:
+                from src.fetchers.firecrawl_engine import FirecrawlEngine
+                self.firecrawl = FirecrawlEngine(query=self.query)
+            except ImportError:
+                print("[!] FirecrawlEngine nicht verfügbar - URL-Scraping übersprungen")
+                self.firecrawl = None
 
         if raw_urls and self.firecrawl:
             print(f"[*] Scraping {len(raw_urls)} URLs with Firecrawl...")
