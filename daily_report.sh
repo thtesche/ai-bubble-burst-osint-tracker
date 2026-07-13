@@ -1,15 +1,18 @@
 #!/bin/bash
 
 # AI Bubble Burst OSINT Tracker - Daily Pipeline Runner
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # 1. Configuration & Root Detection
-if [ -f .env ]; then
+if [ -f "$SCRIPT_DIR/.env" ]; then
     set -a
-    source .env
+    source "$SCRIPT_DIR/.env"
     set +a
 fi
 
+# Fallback: use script directory as PROJECT_ROOT if not set
 if [ -z "$PROJECT_ROOT" ]; then
-    PROJECT_ROOT=$(pwd)
+    PROJECT_ROOT="$SCRIPT_DIR"
 fi
 
 # --- CRITICAL FIX: Clear PYTHONPATH to prevent Hermes-Agent leakage ---
