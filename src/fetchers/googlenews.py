@@ -3,6 +3,7 @@ import urllib.parse
 import re
 import os
 import asyncio
+from email.utils import parsedate_to_datetime
 
 
 class GoogleNewsFetcher:
@@ -72,18 +73,26 @@ class GoogleNewsFetcher:
             if link == "https://news.google.com/":
                 continue
 
-            # PubDate filtern (nur gültige Daten)
+            # PubDate filtern und parsen (für Sortierung)
             pub_date = dates[i] if i < len(dates) else "N/A"
             if pub_date == "N/A" or pub_date == "":
                 continue
+            pub_dt = parsedate_to_datetime(pub_date) if pub_date != "N/A" else None
 
             article = {
                 "title": titles[i],
                 "link": link,
                 "pub_date": pub_date,
                 "description": descs[i] if i < len(descs) else "",
+                "_pub_dt": pub_dt,
             }
             articles.append(article)
+
+        # Sortiere nach publish date absteigend (neueste zuerst)
+        articles.sort(key=lambda a: a.get("_pub_dt"), reverse=True)
+        # Internal sort key entfernen
+        for a in articles:
+            a.pop("_pub_dt", None)
 
         return articles
 

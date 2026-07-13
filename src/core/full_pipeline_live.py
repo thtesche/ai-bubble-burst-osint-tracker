@@ -3,6 +3,7 @@ import os
 import asyncio
 import json
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 from typing import Optional
 
 # Add project root (parent of src/) to path
@@ -74,11 +75,20 @@ def _generate_report(final_bubble_score: float, sentiment_score: float,
     # Google News
     googlenews_articles = googlenews_data.get("articles", [])
     if googlenews_articles:
-        report += "**📰 Google News (24h):**\n"
+        report += "**📰 Google News (neueste 10):**\n"
         for article in googlenews_articles:
             title = article.get("title", "No Title")
             link = article.get("link", "#")
-            report += f"- [{title}]({link})\n"
+            raw_date = article.get("pub_date", "")
+            if raw_date:
+                try:
+                    dt = parsedate_to_datetime(raw_date)
+                    date_str = dt.strftime("%d.%m.%Y")
+                except (ValueError, TypeError):
+                    date_str = "N/A"
+            else:
+                date_str = "N/A"
+            report += f"- **{date_str}** [{title}]({link})\n"
         report += "\n"
 
     report += f"*Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n"
