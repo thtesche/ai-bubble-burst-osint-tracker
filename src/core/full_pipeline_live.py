@@ -14,6 +14,8 @@ if project_root not in sys.path:
 from src.fetchers.googlenews import GoogleNewsFetcher
 from src.fetchers.market import MarketDataFetcher
 from src.core.engine import ScoringEngine
+from src.inference import LLMEngine, LLMResponse, build_system_prompt, build_user_prompt
+
 
 class PipelineError(Exception):
     """Raised when the pipeline cannot proceed due to missing or invalid data."""
@@ -23,7 +25,8 @@ class PipelineError(Exception):
 def _generate_report(final_bubble_score: float, sentiment_score: float,
                      market_score: float, capex_score: float,
                      news_data: list, googlenews_data: dict,
-                     market_metrics: dict, capex_data: dict) -> str:
+                     market_metrics: dict, capex_data: dict,
+                     llm_response: Optional[LLMResponse] = None) -> str:
     """Formats the final findings into a professional report."""
     report = "### 🫧 AI Bubble Burst Report\n"
     report += f"**Current Bubble Score: {final_bubble_score:.1f}%**\n\n"
@@ -90,6 +93,14 @@ def _generate_report(final_bubble_score: float, sentiment_score: float,
                 date_str = "N/A"
             report += f"- **{date_str}** [{title}]({link})\n"
         report += "\n"
+
+    # LLM Risk Evaluation (if available)
+    if llm_response and llm_response.is_success and llm_response.content:
+        report += "**🤖 LLM Risk Evaluation:**\n"
+        report += f"__Model__: `{llm_response.model}`\n\n"
+        report += f"{llm_response.content}\n\n"
+    elif llm_response and not llm_response.is_success:
+        report += f"**⚠️ LLM Inference skipped:** {llm_response.error}\n\n"
 
     report += f"*Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n"
 
@@ -192,12 +203,46 @@ async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2
         sentiment_score, market_score, capex_score
     )
     print(f"\n[!!!] FINAL REAL BUBBLE SCORE: {final_bubble_score:.2f}%")
+
+    # 4.5 LLM Inference (Optional — gracefully skipped if API unavailable)
+    llm_response: Optional[LLMResponse] = None
+    try:
+        llm_engine = LLMEngine()
+        print("\n[*] Step 4.5: Running LLM-based risk evaluation...")
+        system_prompt = build_system_prompt()
+        market_summary = ""
+        if market_metrics:
+            for ticker, data in market_metrics.items():
+                market_summary += (
+                    f"- **{ticker}**: ${data['current_price']:.2f} "
+                    f"(daily: {data['daily_change_pct']:+.2f}%, "
+                    f"5d: {data['five_day_change_pct']:+.2f}%)\n"
+                )
+        user_prompt = build_user_prompt(
+            bubble_score=final_bubble_score,
+            sentiment_score=sentiment_score,
+            market_score=market_score,
+            capex_score=capex_score,
+            findings=None,
+            market_summary=market_summary,
+        )
+        llm_response = await llm_engine.generate_async(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+        )
+        if llm_response.is_success:
+            print("[+] LLM risk evaluation completed successfully")
+        else:
+            print(f"[!] LLM inference failed: {llm_response.error}")
+    except Exception as e:
+        print(f"[!] LLM inference error: {e}")
+
     print("=== E2E TEST COMPLETE ===")
 
     # 5. Generate Report
     report = _generate_report(
         final_bubble_score, sentiment_score, market_score, capex_score,
-        [], googlenews_data, market_metrics, capex_data
+        [], googlenews_data, market_metrics, capex_data, llm_response
     )
 
     return report

@@ -29,7 +29,8 @@ async def main_async():
     print("==========================================\n")
 
     # Load .env at the very beginning
-    load_env(os.path.join(os.path.dirname(__file__), '..', '.env'))
+    env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+    load_env(env_path)
 
     # 1. Configuration
     SEARCH_QUERY = os.getenv("SEARCH_QUERY", "AI market bubble burst risk analysis 2025 2026")
@@ -38,6 +39,11 @@ async def main_async():
 
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+    # LLM Configuration (read from .env, used by LLMEngine)
+    LLM_API_KEY = os.getenv("LLM_API_KEY")
+    LLM_API_BASE_URL = os.getenv("LLM_API_BASE_URL", "https://api.openai.com/v1")
+    LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
     # 2. Execute Pipeline: Full E2E (News + Market + CapEx)
     print("[*] Running full pipeline (Firecrawl + Google News + yfinance)...\n")
