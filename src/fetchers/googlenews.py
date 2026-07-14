@@ -139,9 +139,9 @@ class GoogleNewsFetcher:
 
         return 0
 
-    def fetch_articles(self) -> dict:
+    async def fetch_articles(self) -> dict:
         """
-        Fetches Google News articles and scrapes URLs with Firecrawl.
+        Async fetch: Google News RSS + Firecrawl scrape (cache-mode).
 
         Returns:
             dict with:
@@ -174,11 +174,11 @@ class GoogleNewsFetcher:
             f"(total 24h results: {total_results})"
         )
 
-        # Scrape URLs with Firecrawl, if Firecrawl available and use_firecrawl=True
+        # Scrape URLs with Firecrawl (cache-mode), if Firecrawl available and use_firecrawl=True
         if raw_urls and self.use_firecrawl:
             try:
                 from src.fetchers.firecrawl_engine import FirecrawlEngine
-                self.firecrawl = FirecrawlEngine(query=self.query)
+                self.firecrawl = FirecrawlEngine()
             except ImportError:
                 print("[!] FirecrawlEngine not available - URL scraping skipped")
                 self.firecrawl = None
@@ -186,18 +186,14 @@ class GoogleNewsFetcher:
         if raw_urls and self.firecrawl:
             print(f"[*] Scraping {len(raw_urls)} URLs with Firecrawl...")
             try:
-                scraped = asyncio.run(
-                    self.firecrawl.search_and_scrape(
-                        limit=self.limit, time_filter="qdr:d"
-                    )
-                )
-                # Add scraped content to articles
+                scraped = []
+                for url in raw_urls:
+                    scrape_result = await self.firecrawl.scrape(url)
+                    if scrape_result:
+                        scraped.append(scrape_result)
                 for i, article in enumerate(articles):
                     if i < len(scraped):
-                        article["content"] = (
-                            scraped[i].get("markdown")
-                            or scraped[i].get("content", "")
-                        )
+                        article["content"] = scraped[i].get("markdown", "")
             except Exception as e:
                 print(f"[!] Firecrawl scraping failed: {e}")
 
@@ -205,4 +201,4 @@ class GoogleNewsFetcher:
 
     def fetch_articles_sync(self) -> dict:
         """Sync wrapper for fetch_articles()."""
-        return self.fetch_articles()
+        return asyncio.run(self.fetch_articles())

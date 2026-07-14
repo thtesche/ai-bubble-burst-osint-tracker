@@ -156,9 +156,9 @@ async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2
     if market_fetcher is None:
         market_fetcher = MarketDataFetcher(tickers=tickers)
 
-    # 2. Google News Fetching
-    print("\n[*] Step 1: Fetching news via Google News RSS...")
-    googlenews_data = googlenews_fetcher.fetch_articles()
+    # 2. Google News Fetching (async now — scrapes URLs with Firecrawl internally)
+    print("\n[*] Step 1: Fetching news via Google News RSS + Firecrawl...")
+    googlenews_data = await googlenews_fetcher.fetch_articles()
 
     if not googlenews_data or not googlenews_data.get("articles"):
         raise PipelineError("Failed to fetch Google News articles. Pipeline aborted.")

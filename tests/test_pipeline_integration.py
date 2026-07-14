@@ -23,8 +23,8 @@ class MockGoogleNewsFetcher:
         self.query = query
         self.limit = limit
     
-    def fetch_articles(self) -> dict:
-        return {"articles": [], "total_results": 0}
+    async def fetch_articles(self) -> dict:
+        return {"articles": [], "total_results": 0, "raw_urls": []}
 
 
 class SuccessMockGoogleNewsFetcher:
@@ -39,7 +39,7 @@ class SuccessMockGoogleNewsFetcher:
         self.query = query
         self.limit = limit
     
-    def fetch_articles(self) -> dict:
+    async def fetch_articles(self) -> dict:
         return {
             "articles": [
                 {
@@ -49,7 +49,8 @@ class SuccessMockGoogleNewsFetcher:
                     "content": "This article contains hype keywords like revolution and breakthrough"
                 }
             ],
-            "total_results": 1
+            "total_results": 1,
+            "raw_urls": ["http://test.com/article1"]
         }
 
 
