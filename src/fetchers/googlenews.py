@@ -3,7 +3,32 @@ import urllib.parse
 import re
 import os
 import asyncio
+from urllib.parse import urlparse
 from email.utils import parsedate_to_datetime
+
+
+def _decode_google_news_url(source_url: str) -> dict:
+    """
+    Decodes a Google News article URL into its original source URL.
+    Uses the async decoder from gnews_decoder.py.
+
+    Args:
+        source_url: The Google News article URL (e.g. news.google.com/rss/articles/...).
+
+    Returns:
+        dict with 'status' and 'decoded_url' (if successful)
+        or 'status' and 'message' (if failed).
+    """
+    try:
+        from src.fetchers.gnews_decoder import GoogleDecoderAsync
+
+        async def _async_decode(url: str) -> dict:
+            async with GoogleDecoderAsync() as decoder:
+                return await decoder.decode_google_news_url(url)
+
+        return asyncio.run(_async_decode(source_url))
+    except Exception as e:
+        return {"status": False, "message": f"Error in _decode_google_news_url: {str(e)}"}
 
 
 class GoogleNewsFetcher:
@@ -16,11 +41,19 @@ class GoogleNewsFetcher:
     - Scrapes URLs with Firecrawl for full content
     """
 
-    def __init__(self, query: str, limit: int = 10, logger=None, use_firecrawl: bool = True):
+    def __init__(
+        self,
+        query: str,
+        limit: int = 10,
+        logger=None,
+        use_firecrawl: bool = True,
+        hits_to_decode: int = 1,
+    ):
         self.query = query
         self.limit = limit
         self.logger = logger
         self.use_firecrawl = use_firecrawl  # Whether Firecrawl should be used for URL scraping
+        self.hits_to_decode = hits_to_decode  # Number of newest articles to decode (default: 1)
         # Firecrawl Engine for URL scraping
         self.firecrawl = None  # Lazily initialized
 
@@ -153,13 +186,14 @@ class GoogleNewsFetcher:
 
     async def fetch_articles(self) -> dict:
         """
-        Async fetch: Google News RSS + Firecrawl scrape (cache-mode).
+        Async fetch: Google News RSS + URL decoding + Firecrawl scrape (cache-mode).
 
         Returns:
             dict with:
-                - articles: list[dict] with title, link, pub_date, description
+                - articles: list[dict] with title, link (Google redirect),
+                    origin_url (decoded real URL), pub_date, description
                 - total_results: int (total number of results in the last 24h)
-                - raw_urls: list[str] (URLs to scrape with Firecrawl)
+                - raw_urls: list[str] (Google News links for Firecrawl scraping)
         """
         rss_url = self._build_rss_url(self.query, self.limit)
 
@@ -171,6 +205,50 @@ class GoogleNewsFetcher:
 
         articles = self._parse_rss(xml_data)
         total_results = self._count_total_results(xml_data)
+
+        # Collect Google News links for batch decoding (only first hits_to_decode articles)
+        # Note: We MUST decode the URLs even if origin_url is already set from <source>,
+        # because <source url="..."> contains ONLY the domain (e.g. "https://nytimes.com"),
+        # NOT the actual article URL. The decoder extracts the real article URL.
+        links_to_decode = []
+        for i, article in enumerate(articles):
+            if i >= self.hits_to_decode:
+                break  # Stop after hits_to_decode articles
+            link = article.get("link", "")
+            if link:
+                links_to_decode.append((i, link))
+
+        # Batch decode: send only ONE request to decode all URLs (to avoid 429)
+        if links_to_decode:
+            print(f"[*] Decoding {len(links_to_decode)} Google News URLs...")
+            try:
+                from src.fetchers.gnews_decoder import GoogleDecoderAsync
+
+                async def _async_batch_decode(urls: list[tuple[int, str]]) -> dict:
+                    async with GoogleDecoderAsync() as decoder:
+                        results = {}
+                        for idx, url in urls:
+                            print(f"  Decoding: {url[:60]}...")
+                            result = await decoder.decode_google_news_url(url, interval=0)
+                            if result.get("status"):
+                                results[idx] = result.get("decoded_url")
+                            else:
+                                print(f"  [!] Failed: {result.get('message')}")
+                        return results
+
+                decoded_results = await _async_batch_decode(links_to_decode)
+                for idx, url in decoded_results.items():
+                    articles[idx]["origin_url"] = url
+            except Exception as e:
+                print(f"[!] Batch decoding failed: {e}")
+                # Fall back: try decoding one URL at a time (slower, but may work)
+                for i, link in links_to_decode:
+                    print(f"[!] Trying individual decode for: {link[:60]}...")
+                    decoded = _decode_google_news_url(link)
+                    if decoded.get("status"):
+                        articles[i]["origin_url"] = decoded.get("decoded_url")
+                    else:
+                        print(f"[!] Individual decode failed: {decoded.get('message')}")
 
         # Extract URLs for Firecrawl scraping
         raw_urls = [a["link"] for a in articles]

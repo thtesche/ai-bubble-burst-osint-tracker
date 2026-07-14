@@ -36,6 +36,7 @@ async def main_async():
     SEARCH_QUERY = os.getenv("SEARCH_QUERY", "AI market bubble burst risk analysis 2025 2026")
     MARKET_TICKERS = [t.strip() for t in os.getenv("MARKET_TICKERS", "MSFT,GOOGL,AMZN,META,NVDA,AMD,ASML,AVGO,MU,DELL,SMCI,HPE").split(",") if t.strip()]
     LIMIT = int(os.getenv("PIPELINE_LIMIT", "5"))
+    HITS_TO_DECODE = int(os.getenv("HITS_TO_DECODE", "1"))  # Number of Google News articles to decode (default: 1)
 
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -47,7 +48,7 @@ async def main_async():
 
     # 2. Execute Pipeline: Full E2E (News + Market + CapEx)
     print("[*] Running full pipeline (Firecrawl + Google News + yfinance)...\n")
-    result: PipelineResult = await run_pipeline(query=SEARCH_QUERY, limit=LIMIT, tickers=MARKET_TICKERS)
+    result: PipelineResult = await run_pipeline(query=SEARCH_QUERY, limit=LIMIT, tickers=MARKET_TICKERS, hits_to_decode=HITS_TO_DECODE)
 
     # 3. Output Report to console (legacy)
     print("\n--- FINAL LIVE REPORT ---")

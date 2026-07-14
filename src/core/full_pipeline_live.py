@@ -123,11 +123,14 @@ def _generate_report(final_bubble_score: float, sentiment_score: float,
     return report
 
 
-async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2026",
-                       limit: int = 5,
-                       tickers: list[str] = None,
-                       googlenews_fetcher: Optional[GoogleNewsFetcher] = None,
-                       market_fetcher: Optional[MarketDataFetcher] = None) -> PipelineResult:
+async def run_pipeline(
+    query: str = "AI market bubble burst risk analysis 2025 2026",
+    limit: int = 5,
+    tickers: Optional[list[str]] = None,
+    googlenews_fetcher: Optional[GoogleNewsFetcher] = None,
+    market_fetcher: Optional[MarketDataFetcher] = None,
+    hits_to_decode: int = 1,  # Number of newest Google News articles to decode (default: 1)
+) -> PipelineResult:
     """
     Full E2E pipeline: fetches news (Google News), market data,
     calculates scores, and returns structured data for delivery.
@@ -152,7 +155,9 @@ async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2
     engine = ScoringEngine()
     
     if googlenews_fetcher is None:
-        googlenews_fetcher = GoogleNewsFetcher(query=query, limit=10)
+        googlenews_fetcher = GoogleNewsFetcher(
+            query=query, limit=10, hits_to_decode=hits_to_decode
+        )
         
     if market_fetcher is None:
         market_fetcher = MarketDataFetcher(tickers=tickers)
