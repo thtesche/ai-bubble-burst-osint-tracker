@@ -5,7 +5,7 @@ import asyncio
 # Add project root to PYTHONPATH
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.core.full_pipeline_live import run_pipeline
+from src.core.full_pipeline_live import run_pipeline, PipelineResult
 from src.delivery.telegram import TelegramDelivery
 
 
@@ -47,17 +47,26 @@ async def main_async():
 
     # 2. Execute Pipeline: Full E2E (News + Market + CapEx)
     print("[*] Running full pipeline (Firecrawl + Google News + yfinance)...\n")
-    report = await run_pipeline(query=SEARCH_QUERY, limit=LIMIT, tickers=MARKET_TICKERS)
+    result: PipelineResult = await run_pipeline(query=SEARCH_QUERY, limit=LIMIT, tickers=MARKET_TICKERS)
 
-    # 3. Output Report to console
+    # 3. Output Report to console (legacy)
     print("\n--- FINAL LIVE REPORT ---")
-    print(report)
 
-    # 4. Delivery: Telegram (ACTIVE)
+    # 4. Delivery: Telegram (ACTIVE) — structured, LLM first
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-        print("\n[*] Phase 4: Delivering report via Telegram...")
+        print("\n[*] Phase 4: Delivering structured report via Telegram...")
         delivery = TelegramDelivery(bot_token=TELEGRAM_BOT_TOKEN, chat_id=TELEGRAM_CHAT_ID)
-        success = await delivery.send_report(report)
+        success = await delivery.send_structured_report(
+            llm_content=result.llm_content,
+            market_metrics=result.market_metrics,
+            capex_data=result.capex_data,
+            googlenews_articles=result.googlenews_articles,
+            bubble_score=result.bubble_score,
+            sentiment_score=result.sentiment_score,
+            market_score=result.market_score,
+            capex_score=result.capex_score,
+            model=result.llm_model,
+        )
         if success:
             print("[+] Delivery successful!")
         else:

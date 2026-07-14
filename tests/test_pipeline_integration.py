@@ -8,7 +8,7 @@ import pytest
 project_root = "/Users/thtesche/VibeCoding/ai-bubble-burst-osint-tracker"
 sys.path.insert(0, project_root)
 
-from src.core.full_pipeline_live import run_pipeline, PipelineError
+from src.core.full_pipeline_live import run_pipeline, PipelineError, PipelineResult
 
 
 class MockGoogleNewsFetcher:
@@ -114,11 +114,11 @@ def test_pipeline_runs_successfully_with_mocks():
         )
     )
     
-    assert isinstance(report, str), "Report must be a string"
-    assert "AI Bubble Burst Report" in report, "Report must contain the headline"
-    assert "AI Revolution: Unprecedented Growth" in report, "Report must contain the title"
-    assert "150.00" in report, "Report must contain the price"
-    # Report must not contain API calls to external services
+    assert isinstance(report, PipelineResult), "Report must be a PipelineResult"
+    assert report.bubble_score > 0, "Bubble score must be calculated"
+    assert len(report.googlenews_articles) > 0, "Must contain Google News articles"
+    assert "AAPL" in report.market_metrics, "Must contain market metrics"
+    # LLM may or may not have run (depends on API key), so llm_content can be empty
 
 
 def test_pipeline_creates_log_file():

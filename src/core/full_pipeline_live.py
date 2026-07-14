@@ -2,6 +2,7 @@ import sys
 import os
 import asyncio
 import json
+from dataclasses import dataclass
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from typing import Optional
@@ -15,6 +16,20 @@ from src.fetchers.googlenews import GoogleNewsFetcher
 from src.fetchers.market import MarketDataFetcher
 from src.core.engine import ScoringEngine
 from src.inference import LLMEngine, LLMResponse, build_system_prompt, build_user_prompt
+
+
+@dataclass
+class PipelineResult:
+    """Structured return value for the pipeline."""
+    bubble_score: float
+    sentiment_score: float
+    market_score: float
+    capex_score: float
+    market_metrics: dict
+    capex_data: dict
+    googlenews_articles: list[dict]
+    llm_content: str = ""
+    llm_model: str = ""
 
 
 class PipelineError(Exception):
@@ -111,16 +126,16 @@ async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2
                        limit: int = 5,
                        tickers: list[str] = None,
                        googlenews_fetcher: Optional[GoogleNewsFetcher] = None,
-                       market_fetcher: Optional[MarketDataFetcher] = None) -> str:
+                       market_fetcher: Optional[MarketDataFetcher] = None) -> PipelineResult:
     """
     Full E2E pipeline: fetches news (Google News), market data,
-    calculates scores, and returns a formatted report string.
+    calculates scores, and returns structured data for delivery.
 
     Uses Dependency Injection for fetchers to allow easier testing.
     If no fetchers are provided, default instances are created.
 
     Returns:
-        str: Markdown-formatted report ready for delivery.
+        PipelineResult: Structured data containing all scores, data, and LLM output.
     
     Raises:
         PipelineError: if critical data fetching fails.
@@ -205,7 +220,8 @@ async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2
     print(f"\n[!!!] FINAL REAL BUBBLE SCORE: {final_bubble_score:.2f}%")
 
     # 4.5 LLM Inference (Optional — gracefully skipped if API unavailable)
-    llm_response: Optional[LLMResponse] = None
+    llm_content = ""
+    llm_model = ""
     try:
         llm_engine = LLMEngine()
         print("\n[*] Step 4.5: Running LLM-based risk evaluation...")
@@ -232,6 +248,8 @@ async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2
         )
         if llm_response.is_success:
             print("[+] LLM risk evaluation completed successfully")
+            llm_content = llm_response.content or ""
+            llm_model = llm_response.model or ""
         else:
             print(f"[!] LLM inference failed: {llm_response.error}")
     except Exception as e:
@@ -239,14 +257,23 @@ async def run_pipeline(query: str = "AI market bubble burst risk analysis 2025 2
 
     print("=== E2E TEST COMPLETE ===")
 
-    # 5. Generate Report
+    # Generate report string for console output (legacy)
     report = _generate_report(
         final_bubble_score, sentiment_score, market_score, capex_score,
-        [], googlenews_data, market_metrics, capex_data, llm_response
+        [], googlenews_data, market_metrics, capex_data
     )
 
-    return report
-
+    return PipelineResult(
+        bubble_score=final_bubble_score,
+        sentiment_score=sentiment_score,
+        market_score=market_score,
+        capex_score=capex_score,
+        market_metrics=market_metrics,
+        capex_data=capex_data,
+        googlenews_articles=googlenews_articles,
+        llm_content=llm_content,
+        llm_model=llm_model,
+    )
 
 
 def e2e_test():
