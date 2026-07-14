@@ -3,7 +3,6 @@ import httpx
 from typing import Optional, Dict, Any
 from dataclasses import dataclass, field
 
-
 @dataclass
 class LLMResponse:
     """Standardized response from any OpenAI-compatible API."""
@@ -71,8 +70,6 @@ class LLMEngine:
         payload = {
             "model": self.model,
             "messages": messages,
-            "temperature": 0.3,
-            "max_tokens": 2000,
         }
 
         headers = {
