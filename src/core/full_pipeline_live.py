@@ -96,7 +96,8 @@ def _generate_report(final_bubble_score: float, sentiment_score: float,
         report += "**📰 Google News (neueste 10):**\n"
         for article in googlenews_articles:
             title = article.get("title", "No Title")
-            link = article.get("link", "#")
+            # Prefer originUrl (real source URL); fall back to Google redirect link
+            link = article.get("origin_url") or article.get("link", "#")
             raw_date = article.get("pub_date", "")
             if raw_date:
                 try:

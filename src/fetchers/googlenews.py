@@ -55,6 +55,8 @@ class GoogleNewsFetcher:
         links = re.findall(r"<link>([^<]+)</link>", xml_data)
         dates = re.findall(r"<pubDate>([^<]+)</pubDate>", xml_data)
         descs = re.findall(r"<description>([^<]+)</description>", xml_data)
+        # Extract originUrl from <source url="..."> tag
+        source_urls = re.findall(r'<source url="([^"]+)"', xml_data)
 
         articles = []
         # Skip first entry (Google News Header)
@@ -79,9 +81,19 @@ class GoogleNewsFetcher:
                 continue
             pub_dt = parsedate_to_datetime(pub_date) if pub_date != "N/A" else None
 
+            # OriginUrl from <source url="..."> (real article URL, not Google redirect)
+            origin_url = source_urls[i] if i < len(source_urls) else None
+            if origin_url:
+                origin_url = (
+                    origin_url.replace("&amp;", "&")
+                    .replace("&quot;", '"')
+                    .replace("&#39;", "'")
+                )
+
             article = {
                 "title": titles[i],
                 "link": link,
+                "origin_url": origin_url,
                 "pub_date": pub_date,
                 "description": descs[i] if i < len(descs) else "",
                 "_pub_dt": pub_dt,
