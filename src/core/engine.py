@@ -2,8 +2,8 @@ import re
 
 class ScoringEngine:
     """
-    Verarbeitet extrahierte News-Inhalte und berechnet einen Hype-Score.
-    Diese Klasse ist rein auf Standard-Python angewiesen und somit testbar.
+    Processes extracted news content and calculates a Hype Score.
+    This class relies solely on standard Python and is therefore testable.
     """
     def __init__(self, hype_keywords=None):
         self.hype_keywords = hype_keywords or [
@@ -14,8 +14,8 @@ class ScoringEngine:
 
     def analyze_sentiment(self, contents: list[str]) -> float:
         """
-        Analysiert die Häufigkeit von Hype-Keywords in den Texten.
-        Gibt einen Wert zwischen 0 (neutral) und 1 (extremer Hype/Risiko) zurück.
+        Analyzes the frequency of Hype keywords in the texts.
+        Returns a value between 0 (neutral) and 1 (extreme hype/risk).
         """
         if not contents:
             return 0.0
@@ -29,21 +29,21 @@ class ScoringEngine:
             total_words += len(words)
             
             for word in self.hype_keywords:
-                # Wir zählen Treffer (einfache Implementierung für MVP)
+                # We count hits (simple implementation for MVP)
                 total_hits += text_lower.count(word)
 
         if total_words == 0:
             return 0.0
 
-        # Normalisierung: Wir nehmen an, dass eine sehr hohe Dichte an Keywords 
-        # (z.B. 1% aller Wörter) einen Score von 1.0 ergibt.
+        # Normalization: We assume that a very high density of keywords
+        # (e.g. 1% of all words) yields a Score of 1.0.
         score = (total_hits / total_words) * 100
         return min(score, 1.0)
 
     def calculate_final_score(self, sentiment_score: float, market_score: float, capex_score: float = 0.5) -> float:
         """
-        Kombiniert die Scores zu einem finalen 0-100% Wert.
-        Gewichtung: 40% Sentiment, 20% Market, 40% CapEx (für MVP).
+        Combines the scores into a final 0-100% value.
+        Weighting: 40% Sentiment, 20% Market, 40% CapEx (for MVP).
         """
         combined = (sentiment_score * 0.4) + (market_score * 0.2) + (capex_score * 0.4)
         return combined * 100

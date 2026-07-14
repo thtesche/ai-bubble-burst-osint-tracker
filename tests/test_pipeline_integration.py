@@ -1,4 +1,4 @@
-"""Integrationstests für die Pipeline mit Mock-Fetchern."""
+"""Integration tests for the pipeline with mock fetchers."""
 import sys
 import os
 import asyncio
@@ -12,7 +12,7 @@ from src.core.full_pipeline_live import run_pipeline, PipelineError
 
 
 class MockGoogleNewsFetcher:
-    """Gibt leere News → löst PipelineError aus."""
+    """Returns empty news → raises PipelineError."""
     
     __annotations__ = {
         "query": str,
@@ -28,7 +28,7 @@ class MockGoogleNewsFetcher:
 
 
 class SuccessMockGoogleNewsFetcher:
-    """Gibt gültige News zurück."""
+    """Returns valid news."""
     
     __annotations__ = {
         "query": str,
@@ -54,7 +54,7 @@ class SuccessMockGoogleNewsFetcher:
 
 
 class MockMarketDataFetcher:
-    """Gibt einfache Market-Daten zurück."""
+    """Returns simple market data."""
     
     __annotations__ = {
         "tickers": list[str]
@@ -87,7 +87,7 @@ class MockMarketDataFetcher:
 
 
 def test_pipeline_raises_error_on_empty_news():
-    """Pipeline muss einen PipelineError werfen, wenn keine News gefunden werden."""
+    """Pipeline must raise a PipelineError when no news is found."""
     mock_news = MockGoogleNewsFetcher()
     mock_market = MockMarketDataFetcher()
     
@@ -102,7 +102,7 @@ def test_pipeline_raises_error_on_empty_news():
 
 
 def test_pipeline_runs_successfully_with_mocks():
-    """Pipeline muss erfolgreich mit Mock-Fetchern durchlaufen."""
+    """Pipeline must run successfully with mock fetchers."""
     mock_news = SuccessMockGoogleNewsFetcher()
     mock_market = MockMarketDataFetcher()
     
@@ -114,19 +114,19 @@ def test_pipeline_runs_successfully_with_mocks():
         )
     )
     
-    assert isinstance(report, str), "Report muss ein String sein"
-    assert "AI Bubble Burst Report" in report, "Report muss dieheadline enthalten"
-    assert "AI Revolution: Unprecedented Growth" in report, "Report muss den Titel enthalten"
-    assert "150.00" in report, "Report muss den Preis enthalten"
-    # Report darf keine API-Calls an externe Dienste enthalten
+    assert isinstance(report, str), "Report must be a string"
+    assert "AI Bubble Burst Report" in report, "Report must contain the headline"
+    assert "AI Revolution: Unprecedented Growth" in report, "Report must contain the title"
+    assert "150.00" in report, "Report must contain the price"
+    # Report must not contain API calls to external services
 
 
 def test_pipeline_creates_log_file():
-    """Pipeline muss eine JSON-Logdatei im logs/runs/ Verzeichnis erstellen."""
+    """Pipeline must create a JSON log file in the logs/runs/ directory."""
     log_dir = os.path.join(project_root, "logs", "runs")
     os.makedirs(log_dir, exist_ok=True)
     
-    # Alte Logs löschen für sauberen Test
+    # Delete old logs for clean test
     for f in os.listdir(log_dir):
         if f.startswith("googlenews_raw_"):
             os.remove(os.path.join(log_dir, f))
@@ -136,7 +136,7 @@ def test_pipeline_creates_log_file():
     mock_news = SuccessMockGoogleNewsFetcher()
     mock_market = MockMarketDataFetcher()
     
-    # Pipeline ausführen
+    # Run pipeline
     asyncio.run(
         run_pipeline(
             query="test",
@@ -146,16 +146,16 @@ def test_pipeline_creates_log_file():
     )
     
     after_count = len([f for f in os.listdir(log_dir) if f.startswith("googlenews_raw_")])
-    assert after_count > before_count, "Pipeline muss eine neue Logdatei erstellen"
+    assert after_count > before_count, "Pipeline must create a new log file"
 
 
 def test_default_fetchers_when_none_provided():
-    """Wenn keine Fetcher übergeben werden, müssen Default-Fetcher erstellt werden."""
-    # Dies führt zu echten API-Calls, daher überspringen wir es in CI,
-    # aber lokal ist es ein guter Test.
+    """When no fetchers are provided, default fetchers must be created."""
+    # This triggers real API calls, so we skip it in CI,
+    # but locally it's a good test.
     # async def test_real_pipeline():
     #     report = await run_pipeline()
     #     assert "Bubble Score" in report
     # asyncio.run(test_real_pipeline())
-    # Für Tests überspringen wir den echten Call:
-    pytest.skip("Echte API-Calls in Tests übersprungen")
+    # For tests we skip the real call:
+    pytest.skip("Real API calls skipped in tests")

@@ -1,86 +1,75 @@
 # AI-Bubble-Burst-OSINT-Tracker
 
-Ein hochgradig robuster, modularer Tracker zur Identifizierung von Anzeichen einer KI-Blase durch die Kombination von News-Sentiment und Marktdaten.
+A highly robust, modular tracker for identifying signs of an AI bubble through the combination of news sentiment and market data.
 
-## 🚀 Kernkonzept
-Der Tracker berechnet einen **"Bubble Burst Score" (0-100%)** basierend auf zwei Dimensionen:
-1.  **Sentiment (Qualitativ):** Analyse von News-Inhalten auf Hype-Keywords vs. technische Substanz (via LLM & Snippet-Parsing).
-2.  **Market Action (Quantitativ):** Analyse von Kursbewegungen relevanter Tech-Indizes und Aktien.
+## 🚀 Core Concept
+The tracker calculates a **"Bubble Burst Score" (0-100%)** based on two dimensions:
+1.  **Sentiment (Qualitative):** Analysis of news content for hype keywords vs. technical substance (via LLM & snippet parsing).
+2.  **Market Action (Quantitative):** Analysis of price movements of relevant tech indices and stocks.
 
-## 🛠 Architektur & Resilienz
-Das System wurde nach dem Prinzip der **"Graceful Degradation"** entwickelt, um auch gegen aggressive Bot-Schutzmechanismen (z.B. auf Yahoo Finance oder Reuters) stabil zu bleiben:
+## 🛠 Architecture & Resilience
+The system was designed according to the principle of **"Graceful Degradation"** to remain stable even against aggressive bot protection mechanisms (e.g., on Yahoo Finance or Reuters):
 
-*   **Hybrid-Execution:** Das System nutzt eine lokale Python-Umgebung (`venv`) für schwere Berechnungen und die Hermes-Runtime für die Web-Interaktion.
+*   **Hybrid-Execution:** The system uses a local Python environment (`venv`) for heavy computations and the Hermes runtime for web interaction.
 *   **Cascade-Extraction Strategy:** 
-    *   *Level 1 (Fast):* Extraktion direkt aus Such-Snippets (extrem schnell & bot-resistent).
-    *   *Level 2 (Deep):* Falls Snippet fehlschlägt $\rightarrow$ Vollständige Seiten-Extraktion via `web_extract`.
-    *   *Level 3 (Fallback):* Falls alles fehlschlägt $\rightarrow$ Nutzung neutraler Werte, um die Pipeline stabil zu halten.
-*   **Modularität:** Klare Trennung zwischen `core` (Logik), `fetchers` (Daten) und `delivery` (Output).
+    *   *Level 1 (Fast):* Extraction directly from search snippets (extremely fast & bot-resistant).
+    *   *Level 2 (Deep):* If snippet fails → Full page extraction via `web_extract`.
+    *   *Level 3 (Fallback):* If everything fails → Use neutral values to keep the pipeline stable.
+*   **Modularity:** Clear separation between `core` (logic), `fetchers` (data) and `delivery` (output).
 
-## 📂 Projektstruktur
+## 📂 Project Structure
 ```text
 src/
 ├── core/
-│   ├── engine.py          # Scoring-Logik & mathematische Formel
-│   └── test_full_pipeline_live.py # E2E-Test (Hybrid Mode)
+│   ├── engine.py          # Scoring logic & mathematical formula
+│   └── test_full_pipeline_live.py # E2E test (Hybrid Mode)
 ├── fetchers/
-│   ├── news.py            # News-Suche & Snippet/Deep Extraction
-│   └── market.py          # Markt-Suche & Preis-Extraktion (Search-basiert)
-└── delivery/              # (Geplant: Telegram/Discord Integration)
+│   ├── news.py            # News search & snippet/deep extraction
+│   └── market.py          # Market search & price extraction (search-based)
+└── delivery/              # (Planned: Telegram/Discord integration)
 ```
 
-## 🛠 Installation & Setup (Lokal)
+## 🛠 Installation & Setup (Local)
 
-### 1. Umgebung vorbereiten
-Erstelle ein lokales Virtual Environment direkt im Projektverzeichnis:
+### 1. Prepare Environment
+Create a local virtual environment directly in the project directory:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install yfinance pandas
 ```
 
-### 2. Konfiguration (.env)
-Das Projekt nutzt eine `.env` Datei für lokale Pfade und Geheimnisse. Kopiere die Beispiel-Datei und passe den Pfad an deine Umgebung an:
+### 2. Configuration (.env)
+The project uses a `.env` file for local paths and secrets. Copy the example file and adjust the path to your environment:
 ```bash
 cp .env.example .env
-# Bearbeite die .env Datei und setze PROJECT_ROOT auf deinen absoluten Pfad
+# Edit the .env file and set PROJECT_ROOT to your absolute path
 nano .env 
 ```
 
-### 3. Ausführung (Manuell)
-Um den gesamten Prozess inklusive echter Daten zu testen, nutze die Hermes-Runtime (da diese die `hermes_tools` bereitstellt):
+### 3. Execution (Manual)
+To test the entire process with real data, use the Hermes runtime (as it provides the `hermes_tools`):
 ```bash
 execute_code "import sys; sys.path.append('/path/to/your/project'); from src.core.full_pipeline_live import e2e_test; e2e_test()"
 ```
 
-### 4. Automatisierung (Cronjob)
-Für den täglichen automatisierten Lauf ohne Hermes-Runtime wird das lokale Skript `daily_report.sh` verwendet. Dieses nutzt das lokale `venv` und bricht bei fehlenden Daten oder Tools sauber ab (Fail-Fast).
+### 4. Automation (Cronjob)
+For the daily automated run without the Hermes runtime, the local script `daily_report.sh` is used. This uses the local `venv` and exits cleanly on missing data or tools (Fail-Fast).
 
 **Cronjob Setup:**
-1. Stelle sicher, dass das Skript ausführbar ist: `chmod +x daily_report.sh`
-2. Öffne die Crontab: `crontab -e`
-3. Füge folgenden Eintrag hinzu (Beispiel für täglicher Lauf um 08:00 Uhr):
+1. Ensure the script is executable: `chmod +x daily_report.sh`
+2. Open crontab: `crontab -e`
+3. Add the following entry (example for daily run at 08:00):
 ```cron
 0 8 * * * /path/to/your/project/daily_report.sh >> /path/to/your/project/cron_output.log 2>&1
 ```
 
-*Hinweis: Das Skript loggt alle Details zusätzlich in `logs/runs/`.*
+*Note: The script logs all details additionally in `logs/runs/`.*
 
 ## 📈 Roadmap (V2)
-- [ ] **Echte API-Anbindung:** Ersetzung des Scrapings durch professionelle Finanz-APIs (z.B. *Alpha Vantage* oder *Polygon.io*).
-- [ ] **Erweiterte Datenquellen:** Integration von Krypto-Daten und VC-Funding-News.
-- [ ] **Visualisierung:** Dashboard zur Darstellung der Score-Historie.
-
-```cron
-0 8 * * * /path/to/your/project/daily_report.sh >> /path/to/your/project/cron_output.log 2>&1
-```
-
-*Hinweis: Das Skript loggt alle Details zusätzlich in `logs/runs/`.*
-
-## 📈 Roadmap (V2)
-- [ ] **Echte API-Anbindung:** Ersetzung des Scrapings durch professionelle Finanz-APIs (z.B. *Alpha Vantage* oder *Polygon.io*).
-- [ ] **Erweiterte Datenquellen:** Integration von Krypto-Daten und VC-Funding-News.
-- [ ] **Visualisierung:** Dashboard zur Darstellung der Score-Historie.
+- [ ] **Real API Integration:** Replace scraping with professional financial APIs (e.g., *Alpha Vantage* or *Polygon.io*).
+- [ ] **Extended Data Sources:** Integration of crypto data and VC funding news.
+- [ ] **Visualization:** Dashboard for displaying the score history.
 
 ---
 *Developed with Hermes Agent (by Nous Research)*

@@ -1,4 +1,4 @@
-"""Tests für ScoringEngine - keine externen Abhängigkeiten."""
+"""Tests for ScoringEngine - no external dependencies."""
 import sys
 import os
 
@@ -9,26 +9,26 @@ from src.core.engine import ScoringEngine
 
 
 def test_empty_contents_returns_zero():
-    """Leere Inputs → Score 0."""
+    """Empty inputs → Score 0."""
     engine = ScoringEngine()
     score = engine.analyze_sentiment([])
     assert score == 0.0
 
 
 def test_no_hype_keywords_returns_zero():
-    """Nur neutrale Wörter → Score nahe 0."""
+    """Only neutral words → Score near 0."""
     engine = ScoringEngine()
     contents = [
         "The market showed steady growth with moderate gains. "
         "Analysts expect continued stability in traditional sectors."
     ]
     score = engine.analyze_sentiment(contents)
-    # Kein Hype-Keyword → Score muss sehr niedrig sein
+    # No hype keyword → Score must be very low
     assert score < 0.01
 
 
 def test_high_hype_returns_close_to_one():
-    """Viele Hype-Keywords → Score nahe 1."""
+    """Many hype keywords → Score near 1."""
     engine = ScoringEngine()
     contents = [
         "Revolutionary breakthrough! Unprecedented exponential growth "
@@ -37,20 +37,20 @@ def test_high_hype_returns_close_to_one():
         "speculation risk and bubble concerns about a potential crash."
     ]
     score = engine.analyze_sentiment(contents)
-    assert score > 0, "Score muss > 0 sein bei vielen Hype-Kwd"
+    assert score > 0, "Score must be > 0 with many hype keywords"
     assert score <= 1.0, "Score max 1.0"
 
 
 def test_final_score_combines_correctly():
-    """Gewichtung: 40% Sentiment + 20% Market + 40% CapEx."""
+    """Weighting: 40% Sentiment + 20% Market + 40% CapEx."""
     engine = ScoringEngine()
-    # Alle Mittelwerte → 0.5 * 100 = 50
+    # All mid-values → 0.5 * 100 = 50
     score = engine.calculate_final_score(0.5, 0.5, 0.5)
     assert round(score, 10) == 50.0
 
 
 def test_final_score_uses_weights():
-    """Hoher Sentiment, niedrige Marktposition → mittlerer Score."""
+    """High sentiment, low market position → mid score."""
     engine = ScoringEngine()
     # 1.0 * 0.4 + 0.0 * 0.2 + 0.5 * 0.4 = 0.6 → 60
     score = engine.calculate_final_score(1.0, 0.0, 0.5)
@@ -58,17 +58,17 @@ def test_final_score_uses_weights():
 
 
 def test_capex_default_to_neutral():
-    """CapEx-Default bleibt bei 0.5."""
+    """CapEx default stays at 0.5."""
     engine = ScoringEngine()
-    # Nur Sentiment und Market → CapEx wird 0.5 verwendet
+    # Only Sentiment and Market → CapEx uses 0.5
     score = engine.calculate_final_score(0.8, 0.3)
     expected = (0.8 * 0.4) + (0.3 * 0.2) + (0.5 * 0.4)
     assert round(score, 10) == round(expected * 100, 10)
 
 
 def test_custom_hype_keywords():
-    """Eigene Keywords werden beachtet."""
+    """Custom keywords are respected."""
     engine = ScoringEngine(hype_keywords=["explosion", "panic"])
-    contents = ["Die Explosion am Markt löst Panik bei Anlegern aus."]
+    contents = ["The explosion in the market causes panic among investors."]
     score = engine.analyze_sentiment(contents)
-    assert score > 0, "Score muss > 0 sein bei eigenen Keywords"
+    assert score > 0, "Score must be > 0 with custom keywords"

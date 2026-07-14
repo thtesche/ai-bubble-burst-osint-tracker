@@ -8,24 +8,24 @@ from email.utils import parsedate_to_datetime
 
 class GoogleNewsFetcher:
     """
-    Scrapst Google News RSS-Feed parallel zum Firecrawl-NewsFetcher.
-    - Sprache: en
-    - Limit: 10 Treffer
-    - Zeitfilter: letzte 24h
-    - Gibt Gesamtreffer-Anzahl zurück (wenn verfügbar)
-    - Scrapst URLs mit Firecrawl für vollständige Inhalte
+    Scrapes Google News RSS feed in parallel to Firecrawl-NewsFetcher.
+    - Language: en
+    - Limit: 10 results
+    - Time filter: last 24 hours
+    - Returns total result count (if available)
+    - Scrapes URLs with Firecrawl for full content
     """
 
     def __init__(self, query: str, limit: int = 10, logger=None, use_firecrawl: bool = True):
         self.query = query
         self.limit = limit
         self.logger = logger
-        self.use_firecrawl = use_firecrawl  # Ob Firecrawl für URL-Scraping verwendet werden soll
-        # Firecrawl Engine für URL-Scraping
-        self.firecrawl = None  # Wird lazy initialisiert
+        self.use_firecrawl = use_firecrawl  # Whether Firecrawl should be used for URL scraping
+        # Firecrawl Engine for URL scraping
+        self.firecrawl = None  # Lazily initialized
 
     def _build_rss_url(self, query: str, limit: int = 10) -> str:
-        """Baut die Google News RSS URL."""
+        """Builds the Google News RSS URL."""
         encoded_query = urllib.parse.quote(query)
         return (
             f"https://news.google.com/rss/search?"
@@ -35,7 +35,7 @@ class GoogleNewsFetcher:
         )
 
     def _fetch_rss(self, url: str) -> str:
-        """Holt den RSS-Feed von Google News."""
+        """Fetches the RSS feed from Google News."""
         req = urllib.request.Request(
             url,
             headers={
@@ -50,18 +50,18 @@ class GoogleNewsFetcher:
             return response.read().decode("utf-8")
 
     def _parse_rss(self, xml_data: str) -> list[dict]:
-        """Parsst den RSS-Feed und extrahiert Artikel (max limit)."""
+        """Parses the RSS feed and extracts articles (max limit)."""
         titles = re.findall(r"<title>([^<]+)</title>", xml_data)
         links = re.findall(r"<link>([^<]+)</link>", xml_data)
         dates = re.findall(r"<pubDate>([^<]+)</pubDate>", xml_data)
         descs = re.findall(r"<description>([^<]+)</description>", xml_data)
 
         articles = []
-        # Ersten Eintrag (Google News Header) überspringen
-        # Nur die ersten self.limit Artikel zurückgeben
+        # Skip first entry (Google News Header)
+        # Return only the first self.limit articles
         max_idx = min(len(titles), len(links), self.limit + 2)
         for i in range(1, max_idx):
-            # URL bereinigen (XML-Entities decode)
+            # Clean URL (XML entities decode)
             raw_link = links[i]
             link = (
                 raw_link.replace("&amp;", "&")
@@ -69,11 +69,11 @@ class GoogleNewsFetcher:
                 .replace("&#39;", "'")
             )
 
-            # Google News Header-Eintrag überspringen (Link ist news.google.com)
+            # Skip Google News Header entry (link is news.google.com)
             if link == "https://news.google.com/":
                 continue
 
-            # PubDate filtern und parsen (für Sortierung)
+            # Filter and parse PubDate (for sorting)
             pub_date = dates[i] if i < len(dates) else "N/A"
             if pub_date == "N/A" or pub_date == "":
                 continue
@@ -88,9 +88,9 @@ class GoogleNewsFetcher:
             }
             articles.append(article)
 
-        # Sortiere nach publish date absteigend (neueste zuerst)
+        # Sort by publish date descending (newest first)
         articles.sort(key=lambda a: a.get("_pub_dt"), reverse=True)
-        # Internal sort key entfernen
+        # Remove internal sort key
         for a in articles:
             a.pop("_pub_dt", None)
 
@@ -98,10 +98,10 @@ class GoogleNewsFetcher:
 
     def _count_total_results(self, xml_data: str) -> int:
         """
-        Versucht, die Gesamtzahl der Treffer zu extrahieren.
-        Google News RSS zeigt diese oft im <totalResults>-Tag oder im title.
+        Attempts to extract the total number of results.
+        Google News RSS often shows this in the <totalResults> tag or in the title.
         """
-        # Versuche 1: totalResults Tag
+        # Attempt 1: totalResults tag
         total_match = re.search(
             r"<totalResults[^>]*>([^<]+)</totalResults>", xml_data
         )
@@ -111,8 +111,8 @@ class GoogleNewsFetcher:
             except ValueError:
                 pass
 
-        # Versuche 2: Im title versteckt (manchmal "X results" oder ähnlich)
-        # z.B. "100 results for AI bubble burst"
+        # Attempt 2: Hidden in title (sometimes "X results" or similar)
+        # e.g. "100 results for AI bubble burst"
         title_match = re.search(
             r"(\d+)\s+result", xml_data, re.IGNORECASE
         )
@@ -122,11 +122,11 @@ class GoogleNewsFetcher:
             except ValueError:
                 pass
 
-        # Versuche 3: Im <title> des ersten Eintrags (Google News Header)
+        # Attempt 3: In <title> of first entry (Google News Header)
         all_titles = re.findall(r"<title>([^<]+)</title>", xml_data)
         if len(all_titles) > 0:
-            # Beispiel: "AI bubble burst - Google News"
-            # oder "100 results for AI bubble burst"
+            # Example: "AI bubble burst - Google News"
+            # or "100 results for AI bubble burst"
             title1 = all_titles[0]
             count_match = re.search(
                 r"(\d+)\s+results?", title1, re.IGNORECASE
@@ -141,13 +141,13 @@ class GoogleNewsFetcher:
 
     def fetch_articles(self) -> dict:
         """
-        Holt Google News Artikel und scrapst URLs mit Firecrawl.
+        Fetches Google News articles and scrapes URLs with Firecrawl.
 
         Returns:
-            dict mit:
-                - articles: list[dict] mit title, link, pub_date, description
-                - total_results: int (Gesamtzahl der Treffer in den letzten 24h)
-                - raw_urls: list[str] (URLs zum Scrapen mit Firecrawl)
+            dict with:
+                - articles: list[dict] with title, link, pub_date, description
+                - total_results: int (total number of results in the last 24h)
+                - raw_urls: list[str] (URLs to scrape with Firecrawl)
         """
         rss_url = self._build_rss_url(self.query, self.limit)
 
@@ -160,7 +160,7 @@ class GoogleNewsFetcher:
         articles = self._parse_rss(xml_data)
         total_results = self._count_total_results(xml_data)
 
-        # URLs für Firecrawl Scraping extrahieren
+        # Extract URLs for Firecrawl scraping
         raw_urls = [a["link"] for a in articles]
 
         result = {
@@ -174,13 +174,13 @@ class GoogleNewsFetcher:
             f"(total 24h results: {total_results})"
         )
 
-        # URLs mit Firecrawl scrapen, wenn Firecrawl verfügbar und use_firecrawl=True
+        # Scrape URLs with Firecrawl, if Firecrawl available and use_firecrawl=True
         if raw_urls and self.use_firecrawl:
             try:
                 from src.fetchers.firecrawl_engine import FirecrawlEngine
                 self.firecrawl = FirecrawlEngine(query=self.query)
             except ImportError:
-                print("[!] FirecrawlEngine nicht verfügbar - URL-Scraping übersprungen")
+                print("[!] FirecrawlEngine not available - URL scraping skipped")
                 self.firecrawl = None
 
         if raw_urls and self.firecrawl:
@@ -191,7 +191,7 @@ class GoogleNewsFetcher:
                         limit=self.limit, time_filter="qdr:d"
                     )
                 )
-                # Scraped content zu Artikeln hinzufügen
+                # Add scraped content to articles
                 for i, article in enumerate(articles):
                     if i < len(scraped):
                         article["content"] = (
@@ -204,5 +204,5 @@ class GoogleNewsFetcher:
         return result
 
     def fetch_articles_sync(self) -> dict:
-        """Sync wrapper für fetch_articles()."""
+        """Sync wrapper for fetch_articles()."""
         return self.fetch_articles()
