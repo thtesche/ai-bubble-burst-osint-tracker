@@ -129,7 +129,6 @@ async def run_pipeline(
     tickers: Optional[list[str]] = None,
     googlenews_fetcher: Optional[GoogleNewsFetcher] = None,
     market_fetcher: Optional[MarketDataFetcher] = None,
-    hits_to_decode: int = 1,  # Number of newest Google News articles to decode (default: 1)
 ) -> PipelineResult:
     """
     Full E2E pipeline: fetches news (Google News), market data,
@@ -156,7 +155,7 @@ async def run_pipeline(
     
     if googlenews_fetcher is None:
         googlenews_fetcher = GoogleNewsFetcher(
-            query=query, limit=10, hits_to_decode=hits_to_decode
+            query=query, limit=10
         )
         
     if market_fetcher is None:

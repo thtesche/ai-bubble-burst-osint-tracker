@@ -1,16 +1,25 @@
+"""
+Google News Fetcher with URL decoding and Firecrawl scraping.
+
+Decodes Google News RSS links to their original URLs using the
+SSujitX googlenewsdecoder package, then scrapes the real article content
+via Firecrawl.
+"""
+
 import urllib.request
 import urllib.parse
 import re
 import os
-import asyncio
 from urllib.parse import urlparse
 from email.utils import parsedate_to_datetime
+
+import asyncio
+from googlenewsdecoder import gnewsdecoder
 
 
 def _decode_google_news_url(source_url: str) -> dict:
     """
     Decodes a Google News article URL into its original source URL.
-    Uses the async decoder from gnews_decoder.py.
 
     Args:
         source_url: The Google News article URL (e.g. news.google.com/rss/articles/...).
@@ -20,13 +29,7 @@ def _decode_google_news_url(source_url: str) -> dict:
         or 'status' and 'message' (if failed).
     """
     try:
-        from src.fetchers.gnews_decoder import GoogleDecoderAsync
-
-        async def _async_decode(url: str) -> dict:
-            async with GoogleDecoderAsync() as decoder:
-                return await decoder.decode_google_news_url(url)
-
-        return asyncio.run(_async_decode(source_url))
+        return asyncio.run(asyncio.to_thread(gnewsdecoder, source_url))
     except Exception as e:
         return {"status": False, "message": f"Error in _decode_google_news_url: {str(e)}"}
 
@@ -38,7 +41,8 @@ class GoogleNewsFetcher:
     - Limit: 10 results
     - Time filter: last 24 hours
     - Returns total result count (if available)
-    - Scrapes URLs with Firecrawl for full content
+    - Decodes ALL Google News URLs to origin_url (real article URL)
+    - Scrapes the real article URL with Firecrawl for full content
     """
 
     def __init__(
@@ -47,13 +51,11 @@ class GoogleNewsFetcher:
         limit: int = 10,
         logger=None,
         use_firecrawl: bool = True,
-        hits_to_decode: int = 1,
     ):
         self.query = query
         self.limit = limit
         self.logger = logger
         self.use_firecrawl = use_firecrawl  # Whether Firecrawl should be used for URL scraping
-        self.hits_to_decode = hits_to_decode  # Number of newest articles to decode (default: 1)
         # Firecrawl Engine for URL scraping
         self.firecrawl = None  # Lazily initialized
 
@@ -193,7 +195,7 @@ class GoogleNewsFetcher:
                 - articles: list[dict] with title, link (Google redirect),
                     origin_url (decoded real URL), pub_date, description
                 - total_results: int (total number of results in the last 24h)
-                - raw_urls: list[str] (Google News links for Firecrawl scraping)
+                - raw_urls: list[str] (decoded real URLs for Firecrawl scraping)
         """
         rss_url = self._build_rss_url(self.query, self.limit)
 
@@ -206,35 +208,27 @@ class GoogleNewsFetcher:
         articles = self._parse_rss(xml_data)
         total_results = self._count_total_results(xml_data)
 
-        # Collect Google News links for batch decoding (only first hits_to_decode articles)
-        # Note: We MUST decode the URLs even if origin_url is already set from <source>,
-        # because <source url="..."> contains ONLY the domain (e.g. "https://nytimes.com"),
-        # NOT the actual article URL. The decoder extracts the real article URL.
-        links_to_decode = []
-        for i, article in enumerate(articles):
-            if i >= self.hits_to_decode:
-                break  # Stop after hits_to_decode articles
-            link = article.get("link", "")
-            if link:
-                links_to_decode.append((i, link))
+        # Decode ALL Google News links (to origin_url) so we can scrape the real content
+        links_to_decode = [
+            (i, article.get("link", ""))
+            for i, article in enumerate(articles)
+            if article.get("link")
+        ]
 
         # Batch decode: send only ONE request to decode all URLs (to avoid 429)
         if links_to_decode:
             print(f"[*] Decoding {len(links_to_decode)} Google News URLs...")
             try:
-                from src.fetchers.gnews_decoder import GoogleDecoderAsync
-
                 async def _async_batch_decode(urls: list[tuple[int, str]]) -> dict:
-                    async with GoogleDecoderAsync() as decoder:
-                        results = {}
-                        for idx, url in urls:
-                            print(f"  Decoding: {url[:60]}...")
-                            result = await decoder.decode_google_news_url(url, interval=0)
-                            if result.get("status"):
-                                results[idx] = result.get("decoded_url")
-                            else:
-                                print(f"  [!] Failed: {result.get('message')}")
-                        return results
+                    results = {}
+                    for idx, url in urls:
+                        print(f"  Decoding: {url[:60]}...")
+                        result = await asyncio.to_thread(gnewsdecoder, url, interval=0)
+                        if result.get("status"):
+                            results[idx] = result.get("decoded_url")
+                        else:
+                            print(f"  [!] Failed: {result.get('message')}")
+                    return results
 
                 decoded_results = await _async_batch_decode(links_to_decode)
                 for idx, url in decoded_results.items():
@@ -250,13 +244,16 @@ class GoogleNewsFetcher:
                     else:
                         print(f"[!] Individual decode failed: {decoded.get('message')}")
 
-        # Extract URLs for Firecrawl scraping
-        raw_urls = [a["link"] for a in articles]
+        # Use decoded origin_url for Firecrawl scraping (the real article URL)
+        urls_to_scrape = [
+            a.get("origin_url") or a["link"]  # Prefer decoded origin, fall back to Google link
+            for a in articles
+        ]
 
         result = {
             "articles": articles,
             "total_results": total_results,
-            "raw_urls": raw_urls,
+            "raw_urls": urls_to_scrape,  # Real URLs for Firecrawl, not Google redirects
         }
 
         print(
@@ -265,7 +262,7 @@ class GoogleNewsFetcher:
         )
 
         # Scrape URLs with Firecrawl (cache-mode), if Firecrawl available and use_firecrawl=True
-        if raw_urls and self.use_firecrawl:
+        if result["raw_urls"] and self.use_firecrawl:
             try:
                 from src.fetchers.firecrawl_engine import FirecrawlEngine
                 self.firecrawl = FirecrawlEngine()
@@ -273,11 +270,11 @@ class GoogleNewsFetcher:
                 print("[!] FirecrawlEngine not available - URL scraping skipped")
                 self.firecrawl = None
 
-        if raw_urls and self.firecrawl:
-            print(f"[*] Scraping {len(raw_urls)} URLs with Firecrawl...")
+        if result["raw_urls"] and self.firecrawl:
+            print(f"[*] Scraping {len(result['raw_urls'])} URLs with Firecrawl...")
             try:
                 scraped = []
-                for url in raw_urls:
+                for url in result["raw_urls"]:
                     scrape_result = await self.firecrawl.scrape(url)
                     if scrape_result:
                         scraped.append(scrape_result)

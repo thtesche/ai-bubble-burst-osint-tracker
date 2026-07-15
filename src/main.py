@@ -48,7 +48,7 @@ async def main_async():
 
     # 2. Execute Pipeline: Full E2E (News + Market + CapEx)
     print("[*] Running full pipeline (Firecrawl + Google News + yfinance)...\n")
-    result: PipelineResult = await run_pipeline(query=SEARCH_QUERY, limit=LIMIT, tickers=MARKET_TICKERS, hits_to_decode=HITS_TO_DECODE)
+    result: PipelineResult = await run_pipeline(query=SEARCH_QUERY, limit=LIMIT, tickers=MARKET_TICKERS)
 
     # 3. Output Report to console (legacy)
     print("\n--- FINAL LIVE REPORT ---")

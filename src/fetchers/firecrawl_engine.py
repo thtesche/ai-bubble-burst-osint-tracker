@@ -46,12 +46,23 @@ class FirecrawlEngine:
                 return None
 
         data = response.json()
-        if data and "data" in data:
-            return {
-                "url": data["data"].get("url", url),
-                "markdown": data["data"].get("markdown") or data["data"].get("content", ""),
-            }
-        return None
+        # Firecrawl may return {"ok": false, "error": "..."} or
+        # {"ok": true, "data": {"errored": true, ...}, "error": "..."}
+        if not data or "data" not in data:
+            return None
+
+        scraped = data.get("data") or {}
+        # 404/errored: page was blocked or doesn't exist
+        if scraped.get("errored") or (scraped.get("status") == "failed"):
+            err_msg = (scraped.get("error") or
+                       data.get("error") or
+                       f"blocked/unavailable: {url}")
+            print(f"[!] Firecrawl 404/unavailable: {err_msg}")
+            return None
+        # Explicit ok=false check
+        if data.get("ok") is False:
+            print(f"[!] Firecrawl returned error for: {url}")
+            return None
 
     def run(self, url: str) -> Optional[dict]:
         """Synchronous wrapper for sync environments.
