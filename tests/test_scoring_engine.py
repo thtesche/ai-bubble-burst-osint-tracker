@@ -2,7 +2,7 @@
 import sys
 import os
 
-project_root = "/Users/thtesche/VibeCoding/ai-bubble-burst-osint-tracker"
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 from src.core.engine import ScoringEngine
