@@ -159,7 +159,7 @@ class MarketDataFetcher:
                     quarterly_capex = quarterly_cashflow.loc["Capital Expenditure"]
                     capex_data["quarterly_capex"] = {
                         str(q): _extract_scalar(val)
-                        for q, val in quarterly_cashflow.dropna().items()
+                        for q, val in quarterly_capex.dropna().items()
                     }
                 except KeyError:
                     capex_data["quarterly_capex"] = self._extract_capex_from_index(quarterly_cashflow)
@@ -192,24 +192,79 @@ class MarketDataFetcher:
         """
         Falls back if 'Capital Expenditure' doesn't exist as index key.
         Searches the index for similar keys and extracts the data.
+        
+        Strategy (priority order):
+        1. Exact match on "Capital Expenditure" (works for some tickers).
+        2. Fuzzy match on common yfinance labels:
+           "Purchase of Property and Equipment", "Capital Spending",
+           "Purchase of Fixed Assets", "Purchase of Plant and Equipment",
+           "Capital Expenditure", "CAPEX", "PPE PURCHASE".
+        3. Last resort: pick the investing-activity row that best matches
+           CapEx semantics (contains "Purchase" + one of "Property/Equipment/
+           Fixed Assets/Plant").
         """
         available_indices = cashflow_df.index.tolist()
+        upper_indices = {str(k).upper(): str(k) for k in available_indices}
 
-        # Search for alternative keys
-        capex_keys = [
-            k for k in available_indices
-            if any(term in str(k).upper() for term in ["CAPITAL EXPENDITURE", "CAPEX", "PPE PURCHASE"])
+        # Priority 1 & 2: broad exact / substring matching
+        priority_terms = [
+            # Standardized labels used by yfinance for different tickers
+            "CAPITAL EXPENDITURE",
+            "CAPEX",
+            "PPE PURCHASE",
+            "PURCHASE OF PROPERTY AND EQUIPMENT",
+            "PURCHASE OF FIXED ASSETS",
+            "PURCHASE OF PLANT AND EQUIPMENT",
+            "CAPITAL SPENDING",
         ]
+
+        capex_keys = []
+        for term in priority_terms:
+            matches = [
+                upper_indices[u] for u in upper_indices if term in u
+            ]
+            if matches:
+                capex_keys = matches
+                break
 
         if capex_keys:
             key = capex_keys[0]
-            print(f"    [!] Using '{key}' as CapEx alternative for {self.tickers}")
+            print(f"    [!] Using '{key}' as CapEx key for {self.tickers}")
             series = cashflow_df.loc[key]
-            return {str(date): _extract_scalar(val) for date, val in series.dropna().items()}
+            return {
+                str(date): _extract_scalar(val)
+                for date, val in series.dropna().items()
+            }
 
-        # Debug: Show available indices if nothing matches
-        print(f"    [!] 'Capital Expenditure' not found for {self.tickers}.")
-        print(f"    Available CashFlow indices: {[str(i) for i in available_indices[:20]]}")
+        # Priority 3: heuristic — pick a row that looks like CapEx:
+        #   Must contain "PURCHASE" AND (one of: "PROPERTY" / "EQUIPMENT" /
+        #   "FIXED" / "PLANT" / "ASSETS" / "PROPERTY AND EQUIPMENT")
+        heuristic_terms = [
+            "PROPERTY AND EQUIPMENT",
+            "PROPERTY",
+            "EQUIPMENT",
+            "FIXED ASSETS",
+            "PLANT",
+        ]
+        for idx_label in available_indices:
+            label = str(idx_label).upper()
+            if "PURCHASE" not in label:
+                continue
+            if any(t in label for t in heuristic_terms):
+                print(f"    [!] Heuristic CapEx match: '{idx_label}' for {self.tickers}")
+                series = cashflow_df.loc[idx_label]
+                return {
+                    str(date): _extract_scalar(val)
+                    for date, val in series.dropna().items()
+                }
+
+        # Give up — log available indices for debugging
+        print(
+            f"    [!] 'Capital Expenditure' not found for {self.tickers}."
+        )
+        print(
+            f"    Available CashFlow indices: {[str(i) for i in available_indices[:20]]}"
+        )
         return {}
 
     def calculate_capex_score(self, capex_data: dict) -> float:
