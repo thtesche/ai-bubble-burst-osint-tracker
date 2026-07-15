@@ -16,7 +16,3 @@ dependencies = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-
-[tool.uv]
-# Explicitly pin the Python version for uv/dependency resolution
-python = ">=3.12"
