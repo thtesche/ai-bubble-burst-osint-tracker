@@ -1,5 +1,15 @@
 import sys
 
+# Strip Hermes venv paths **before** any third-party imports.
+# Without this, the Hermes venv's broken pandas (Python 3.11) is picked up
+# during module import — before _ensure_yfinance_import() can run.
+_hermes_paths = [p for p in sys.path if '.hermes/hermes-agent/venv' in p or p == '/Users/thtesche/.hermes/hermes-agent']
+for _p in _hermes_paths:
+    sys.path.remove(_p)
+sys.path = [p for p in sys.path if '.hermes' not in p]
+del _hermes_paths
+
+
 import pandas as pd
 
 

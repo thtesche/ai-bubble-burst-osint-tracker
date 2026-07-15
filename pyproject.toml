@@ -1,8 +1,22 @@
 [project]
+name = "ai-bubble-burst-osint-tracker"
+version = "0.1.0"
+description = "OSINT tracker for AI bubble detection"
+requires-python = ">=3.12"
 dependencies = [
     "googlenewsdecoder",
+    "yfinance>=0.2.0",
+    "pandas>=2.0.0",
+    "requests>=2.31.0",
+    "selectolax>=0.3.0",
+    "firecrawl-py",
+    "openai>=1.0.0",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.uv]
+# Explicitly pin the Python version for uv/dependency resolution
+python = ">=3.12"
