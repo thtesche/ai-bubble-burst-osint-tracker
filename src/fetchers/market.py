@@ -1,5 +1,33 @@
 import sys
 
+import pandas as pd
+
+
+def _extract_scalar(val):
+    """
+    Extract a scalar float from yfinance cashflow values, which may be:
+    - A float/int (normal case)
+    - A pandas Series (newer yfinance API with multi-currency metadata)
+    - None (missing data)
+    Returns float or None.
+    """
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    # Series case: take the first (and typically only) numeric value
+    try:
+        if hasattr(val, 'values'):
+            # pandas Series - get numeric values
+            numeric_vals = [v for v in val.values if isinstance(v, (int, float))]
+            if numeric_vals:
+                return float(numeric_vals[0])
+            # If all values are strings or None, return None
+            return None
+    except (AttributeError, TypeError):
+        pass
+    return float(val)
+
 
 class MarketDataFetcher:
     """
@@ -109,7 +137,7 @@ class MarketDataFetcher:
                 try:
                     annual_capex = annual_cashflow.loc["Capital Expenditure"]
                     capex_data["annual_capex"] = {
-                        str(year): float(val)
+                        str(year): _extract_scalar(val)
                         for year, val in annual_capex.dropna().items()
                     }
                 except KeyError:
@@ -120,7 +148,7 @@ class MarketDataFetcher:
                 try:
                     quarterly_capex = quarterly_cashflow.loc["Capital Expenditure"]
                     capex_data["quarterly_capex"] = {
-                        str(q): float(val)
+                        str(q): _extract_scalar(val)
                         for q, val in quarterly_cashflow.dropna().items()
                     }
                 except KeyError:
@@ -130,7 +158,7 @@ class MarketDataFetcher:
                 try:
                     annual_fcf = annual_cashflow.loc["Free Cash Flow"]
                     capex_data["annual_free_cash_flow"] = {
-                        str(year): float(val)
+                        str(year): _extract_scalar(val)
                         for year, val in annual_fcf.dropna().items()
                     }
                 except KeyError:
@@ -167,7 +195,7 @@ class MarketDataFetcher:
             key = capex_keys[0]
             print(f"    [!] Using '{key}' as CapEx alternative for {self.tickers}")
             series = cashflow_df.loc[key]
-            return {str(date): float(val) for date, val in series.dropna().items()}
+            return {str(date): _extract_scalar(val) for date, val in series.dropna().items()}
 
         # Debug: Show available indices if nothing matches
         print(f"    [!] 'Capital Expenditure' not found for {self.tickers}.")
