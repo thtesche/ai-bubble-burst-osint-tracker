@@ -7,9 +7,9 @@ from typing import Optional
 class FirecrawlEngine:
     """
     Minimal Firecrawl engine using the /scrape endpoint.
-    Uses cache (maxAge 12h) by default for speed and reliability.
+    Uses cache (maxAge 3d) by default for speed and reliability.
     """
-    MAX_AGE_MS = 43_200_000  # 12 hours
+    MAX_AGE_MS = 259_200_000  # 3 days
 
     def __init__(self, api_key: str | None = None):
         self.base_url = os.getenv(
