@@ -78,8 +78,9 @@ def _generate_report(final_bubble_score: float, sentiment_score: float,
             quarterly = data.get("quarterly_capex", {})
             if quarterly:
                 sorted_q = sorted(quarterly.keys(), reverse=True)[:3]
-                latest_vals = [abs(float(quarterly[q])) for q in sorted_q]
-                report += f"- **{ticker}**: Latest 3 quarters: {', '.join(f'{v:.0f}' for v in latest_vals)}\n"
+                latest_vals = [abs(float(quarterly[q])) for q in sorted_q if quarterly[q] is not None]
+                if latest_vals:
+                    report += f"- **{ticker}**: Latest 3 quarters: {', '.join(f'{v:.0f}' for v in latest_vals)}\n"
         report += "\n"
 
     # News Analysis (Firecrawl)
