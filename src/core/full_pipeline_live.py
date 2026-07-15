@@ -19,6 +19,40 @@ from src.core.logger import RunLogger
 from src.inference import LLMEngine, LLMResponse, build_system_prompt, build_user_prompt
 
 
+def _format_capex_value(val) -> str | None:
+    """Format a CapEx dollar value as human-readable (e.g. $30.88B)."""
+    if val is None:
+        return None
+    try:
+        v = float(val)
+    except (ValueError, TypeError):
+        return val
+    if abs(v) >= 1e12:
+        return f"${abs(v)/1e12:.2f}T"
+    elif abs(v) >= 1e9:
+        return f"${abs(v)/1e9:.2f}B"
+    elif abs(v) >= 1e6:
+        return f"${abs(v)/1e6:.2f}M"
+    elif abs(v) >= 1e3:
+        return f"${abs(v)/1e3:.2f}K"
+    return f"${abs(v):.2f}"
+
+
+def _format_capex_data(data: dict) -> dict:
+    """Return a copy of capex_data with dates truncated and values formatted."""
+    formatted = {}
+    for ticker, sections in data.items():
+        formatted[ticker] = {}
+        for key, values in sections.items():
+            formatted[ticker][key] = {}
+            for date_key, val in values.items():
+                # Truncate date: keep only the date part
+                if isinstance(date_key, str) and " " in date_key:
+                    date_key = date_key.split(" ")[0]
+                formatted[ticker][key][date_key] = _format_capex_value(val)
+    return formatted
+
+
 @dataclass
 class PipelineResult:
     """Structured return value for the pipeline."""
@@ -204,7 +238,8 @@ async def run_pipeline(
     if capex_data:
         print(f"[+] Successfully fetched CapEx data for {len(capex_data)} tickers")
         print(f"    CapEx Score (bubble risk): {capex_score:.4f}")
-        logger.save_search_results("capex", capex_data)
+        formatted_capex = _format_capex_data(capex_data)
+        logger.save_search_results("capex", formatted_capex)
     else:
         print("[!] WARNING: No CapEx data available. Score defaults to neutral (0.5).")
         capex_score = 0.5
