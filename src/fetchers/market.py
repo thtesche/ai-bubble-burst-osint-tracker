@@ -218,8 +218,9 @@ class MarketDataFetcher:
             quarterly = data.get("quarterly_capex", {})
             if quarterly:
                 # Reverse negative values (absolute value of expenditures)
+                # Filter out None values from _extract_scalar before converting
                 abs_quarterly = {
-                    k: abs(float(v)) for k, v in quarterly.items()
+                    k: abs(float(v)) for k, v in quarterly.items() if v is not None
                 }
                 all_quarterly[ticker] = abs_quarterly
 
