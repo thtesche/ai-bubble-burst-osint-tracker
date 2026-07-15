@@ -96,14 +96,14 @@ class MarketDataFetcher:
 
                 close_series = hist["Close"]
                 price_5d_ago = close_series.iloc[0]
-                daily_change_pct = ((current_price - close_series.iloc[-1]) / close_series.iloc[-1]) * 100
-                five_day_change_pct = ((current_price - price_5d_ago) / price_5d_ago) * 100
+                daily_percent = ((current_price - close_series.iloc[-1]) / close_series.iloc[-1]) * 100
+                five_day_percent = ((current_price - price_5d_ago) / price_5d_ago) * 100
 
-                print(f"[+] {ticker}: ${current_price:.2f} (5d: {five_day_change_pct:+.2f}%)")
+                print(f"[+] {ticker}: ${current_price:.2f} (5d: {five_day_percent:+.2f}%)")
                 results[ticker] = {
-                    "current_price": float(round(current_price, 2)),
-                    "daily_change_pct": float(round(daily_change_pct, 2)),
-                    "five_day_change_pct": float(round(five_day_change_pct, 2)),
+                    "current_price_dollar": float(round(current_price, 2)),
+                    "daily_change_percent": float(round(daily_percent, 2)),
+                    "five_day_change_percent": float(round(five_day_percent, 2)),
                 }
 
             except Exception as e:
@@ -279,7 +279,7 @@ class MarketDataFetcher:
         if not metrics:
             return 0.5
 
-        changes = [m["five_day_change_pct"] for m in metrics.values()]
+        changes = [m["five_day_change_percent"] for m in metrics.values()]
         avg_change = sum(changes) / len(changes)
 
         if avg_change <= -5:

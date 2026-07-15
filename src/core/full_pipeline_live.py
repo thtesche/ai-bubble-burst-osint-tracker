@@ -68,7 +68,7 @@ def _generate_report(final_bubble_score: float, sentiment_score: float,
     if market_metrics:
         report += "**📈 Market Data:**\n"
         for ticker, data in market_metrics.items():
-            report += f"- **{ticker}**: ${data['current_price']:.2f} (daily: {data['daily_change_pct']:+.2f}%, 5d: {data['five_day_change_pct']:+.2f}%)\n"
+            report += f"- **{ticker}**: ${data['current_price_dollar']:.2f} (daily: {data['daily_change_percent']:+.2f}%, 5d: {data['five_day_change_percent']:+.2f}%)\n"
         report += "\n"
 
     # CapEx Data
@@ -245,9 +245,9 @@ async def run_pipeline(
         if market_metrics:
             for ticker, data in market_metrics.items():
                 market_summary += (
-                    f"- **{ticker}**: ${data['current_price']:.2f} "
-                    f"(daily: {data['daily_change_pct']:+.2f}%, "
-                    f"5d: {data['five_day_change_pct']:+.2f}%)\n"
+                    f"- **{ticker}**: ${data['current_price_dollar']:.2f} "
+                    f"(daily: {data['daily_change_percent']:+.2f}%, "
+                    f"5d: {data['five_day_change_percent']:+.2f}%)\n"
                 )
         user_prompt = build_user_prompt(
             bubble_score=final_bubble_score,

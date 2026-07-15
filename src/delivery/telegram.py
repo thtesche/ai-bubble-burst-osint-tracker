@@ -5,7 +5,7 @@ from typing import Optional
 
 def split_telegram_message(text: str, max_chars: int = 4000) -> list[str]:
     """
-    Teilt einen Text in Telegram-kompatible Stücke auf.
+    Teilt einen Text in Telegram-kompatible Teile auf.
     Wir nutzen 4000 statt 4096, um etwas Puffer für HTML/Markdown-Tags zu haben.
     """
     if len(text) <= max_chars:
@@ -138,9 +138,9 @@ class TelegramDelivery:
             market_text = "**📈 Market Data:**\n"
             for ticker, data in market_metrics.items():
                 market_text += (
-                    f"- **{ticker}**: ${data['current_price']:.2f} "
-                    f"(daily: {data['daily_change_pct']:+.2f}%, "
-                    f"5d: {data['five_day_change_pct']:+.2f}%)\n"
+                    f"- **{ticker}**: ${data['current_price_dollar']:.2f} "
+                    f"(daily: {data['daily_change_percent']:+.2f}%, "
+                    f"5d: {data['five_day_change_percent']:+.2f}%)\n"
                 )
             chunks = split_telegram_message(market_text)
             for chunk in chunks:

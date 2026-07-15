@@ -67,9 +67,9 @@ class MockMarketDataFetcher:
     def fetch_market_metrics(self) -> dict:
         return {
             "AAPL": {
-                "current_price": 150.0,
-                "daily_change_pct": 1.0,
-                "five_day_change_pct": 2.0
+                "current_price_dollar": 150.0,
+                "daily_change_percent": 1.0,
+                "five_day_change_percent": 2.0
             }
         }
     
