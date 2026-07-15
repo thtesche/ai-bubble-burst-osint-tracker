@@ -134,31 +134,34 @@ def _count_log_files(base_dir: str) -> int:
 
 def test_pipeline_creates_log_file():
     """Pipeline must create JSON log files in logs/runs/<timestamp>/ via RunLogger."""
-    log_dir = os.path.join(project_root, "logs", "runs")
-    os.makedirs(log_dir, exist_ok=True)
+    import tempfile
 
-    # Ensure RunLogger uses the correct project root (matches test's log_dir)
-    os.environ["PROJECT_ROOT"] = project_root
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        log_dir = os.path.join(tmp_dir, "logs", "runs")
+        os.makedirs(log_dir, exist_ok=True)
 
-    before_count = _count_log_files(log_dir)
+        # Point RunLogger to temp dir
+        os.environ["PROJECT_ROOT"] = tmp_dir
 
-    mock_news = SuccessMockGoogleNewsFetcher()
-    mock_market = MockMarketDataFetcher()
+        before_count = _count_log_files(log_dir)
 
-    # Run pipeline
-    asyncio.run(
-        run_pipeline(
-            query="test",
-            googlenews_fetcher=mock_news,
-            market_fetcher=mock_market
+        mock_news = SuccessMockGoogleNewsFetcher()
+        mock_market = MockMarketDataFetcher()
+
+        # Run pipeline (type: ignore — Mock-Klassen erfüllen Schnittstelle duck-typisiert)
+        asyncio.run(
+            run_pipeline(
+                query="test",
+                googlenews_fetcher=mock_news,  # type: ignore[arg-type]
+                market_fetcher=mock_market  # type: ignore[arg-type]
+            )
         )
-    )
 
-    after_count = _count_log_files(log_dir)
-    assert after_count > before_count, (
-        f"Pipeline must create log files via RunLogger: "
-        f"before={before_count}, after={after_count}"
-    )
+        after_count = _count_log_files(log_dir)
+        assert after_count > before_count, (
+            f"Pipeline must create log files via RunLogger: "
+            f"before={before_count}, after={after_count}"
+        )
 
 
 def test_default_fetchers_when_none_provided():

@@ -1,75 +1,127 @@
-# AI-Bubble-Burst-OSINT-Tracker
+# AI Bubble Burst OSINT Tracker
 
-A highly robust, modular tracker for identifying signs of an AI bubble through the combination of news sentiment and market data.
+A modular tracker that calculates a **Bubble Probability Score (0–100%)** by correlating news sentiment, market performance, and cloud infrastructure investment (CapEx) trends.
 
 ## 🚀 Core Concept
-The tracker calculates a **"Bubble Burst Score" (0-100%)** based on two dimensions:
-1.  **Sentiment (Qualitative):** Analysis of news content for hype keywords vs. technical substance (via LLM & snippet parsing).
-2.  **Market Action (Quantitative):** Analysis of price movements of relevant tech indices and stocks.
 
-## 🛠 Architecture & Resilience
-The system was designed according to the principle of **"Graceful Degradation"** to remain stable even against aggressive bot protection mechanisms (e.g., on Yahoo Finance or Reuters):
+The tracker evaluates three dimensions:
 
-*   **Hybrid-Execution:** The system uses a local Python environment (`venv`) for heavy computations and the Hermes runtime for web interaction.
-*   **Cascade-Extraction Strategy:** 
-    *   *Level 1 (Fast):* Extraction directly from search snippets (extremely fast & bot-resistant).
-    *   *Level 2 (Deep):* If snippet fails → Full page extraction via `web_extract`.
-    *   *Level 3 (Fallback):* If everything fails → Use neutral values to keep the pipeline stable.
-*   **Modularity:** Clear separation between `core` (logic), `fetchers` (data) and `delivery` (output).
+1. **Sentiment (Qualitative):** Keyword-density analysis of 24-hour Google News articles for hype markers (revolution, bubble, crash, etc.).
+2. **Market Action (Quantitative):** 5-day price momentum of 12 AI-relevant stock tickers via yfinance.
+3. **CapEx Trends (Quantitative):** Capital expenditure growth of hyperscalers (Microsoft, Google, Amazon, Meta, NVIDIA, etc.) as a proxy for infrastructure overinvestment.
+
+Weights: 40% Sentiment · 20% Market · 40% CapEx.
+
+> **Fail-Fast Philosophy:** When data cannot be fetched, the pipeline raises a `PipelineError` rather than returning fabricated results. The market-only fallback is a comment in the logs — there is no silent neutral-score fallback.
+
+## 🛠 Architecture
+
+| Module | Responsibility |
+|--------|----------------|
+| `src/fetchers/googlenews.py` | Google News RSS + URL decoding (googlenewsdecoder) + Firecrawl scraping (local Atlantis) |
+| `src/fetchers/market.py` | yfinance — prices + CapEx (cash flow statements) |
+| `src/core/engine.py` | Keyword-density sentiment + weighted final score |
+| `src/core/logger.py` | RunLogger — saves every run to `logs/runs/<timestamp>/` |
+| `src/inference/llm_engine.py` | OpenAI-compatible LLM calls (non-streaming + streaming) |
+| `src/inference/bubble_risk_prompt.py` | Structured prompt templates for LLM evaluation |
+| `src/delivery/telegram.py` | Structured Telegram delivery (LLM first, market/news second) |
+| `src/main.py` | Entry point: loads `.env`, runs pipeline, delivers to Telegram |
 
 ## 📂 Project Structure
+
 ```text
 src/
 ├── core/
-│   ├── engine.py          # Scoring logic & mathematical formula
-│   └── test_full_pipeline_live.py # E2E test (Hybrid Mode)
+│   ├── __init__.py
+│   ├── analyzer.py          # Legacy qualitative/quantitative scorer (not used by pipeline)
+│   ├── engine.py            # Keyword-density sentiment + final score calculation
+│   ├── full_pipeline_live.py# E2E pipeline: news → market → CapEx → scores → LLM
+│   └── logger.py            # RunLogger — saves all data to logs/runs/<timestamp>/
 ├── fetchers/
-│   ├── news.py            # News search & snippet/deep extraction
-│   └── market.py          # Market search & price extraction (search-based)
-└── delivery/              # (Planned: Telegram/Discord integration)
+│   ├── __init__.py
+│   ├── firecrawl_engine.py  # Local Firecrawl/Atlantis /scrape endpoint (cache mode)
+│   ├── googlenews.py        # Google News RSS + URL decoding + Firecrawl scraping
+│   ├── market.py            # yfinance — prices + CapEx (no fake fallback)
+│   └── market_fetcher.py    # Legacy mock (do not use — kept for reference)
+├── delivery/
+│   ├── __init__.py
+│   └── telegram.py          # Structured Telegram delivery (LLM first, chunks)
+└── inference/
+    ├── __init__.py
+    ├── llm_engine.py        # OpenAI-compatible API (non-streaming + streaming)
+    └── bubble_risk_prompt.py# System + user prompt builders
+
+tests/
+├── test_pipeline_integration.py  # Mock-based integration tests
+└── test_scoring_engine.py        # Unit tests (no external deps)
+
+.env.example                    # Configuration template (copy to .env)
+daily_report.sh                 # Standalone cron runner
 ```
 
-## 🛠 Installation & Setup (Local)
+## 🛠 Installation & Setup
 
-### 1. Prepare Environment
-Create a local virtual environment directly in the project directory:
+### 1. Virtual Environment
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install yfinance pandas
 ```
+
+Required packages (managed in `venv/`): `googlenewsdecoder`, `yfinance`, `httpx`, `selectolax`, `pandas`, `numpy`. No explicit `pip install` is needed — the provided `venv/` directory contains all dependencies.
 
 ### 2. Configuration (.env)
-The project uses a `.env` file for local paths and secrets. Copy the example file and adjust the path to your environment:
+
+Copy the example file and fill in your settings:
+
 ```bash
 cp .env.example .env
-# Edit the .env file and set PROJECT_ROOT to your absolute path
-nano .env 
 ```
 
-### 3. Execution (Manual)
-To test the entire process with real data, use the Hermes runtime (as it provides the `hermes_tools`):
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SEARCH_QUERY` | Google News search query | `"AI market bubble burst risk analysis 2025 2026"` |
+| `PIPELINE_LIMIT` | Number of news articles to analyze | `5` |
+| `MARKET_TICKERS` | Comma-separated stock tickers | `MSFT,GOOGL,AMZN,META,NVDA,AMD,ASML,AVGO,MU,DELL,SMCI,HPE` |
+| `TELEGRAM_BOT_TOKEN` | Bot token for Telegram delivery | *(empty — optional)* |
+| `TELEGRAM_CHAT_ID` | Target chat ID | *(empty — optional)* |
+| `LLM_API_KEY` | API key for OpenAI-compatible endpoint | *(empty — optional)* |
+| `LLM_API_BASE_URL` | API base URL | `https://api.openai.com/v1` |
+| `LLM_MODEL` | Model name | `gpt-4o-mini` |
+
+### 3. Run Locally (Standalone)
+
 ```bash
-execute_code "import sys; sys.path.append('/path/to/your/project'); from src.core.full_pipeline_live import e2e_test; e2e_test()"
+# Via the shell script (recommended for cron):
+./daily_report.sh
+
+# Directly with Python:
+python src/main.py
 ```
 
-### 4. Automation (Cronjob)
-For the daily automated run without the Hermes runtime, the local script `daily_report.sh` is used. This uses the local `venv` and exits cleanly on missing data or tools (Fail-Fast).
+The script loads `.env`, runs the full pipeline (news + market + CapEx + optional LLM), and delivers the report to Telegram if credentials are configured. All data is saved to `logs/runs/<timestamp>/`.
 
-**Cronjob Setup:**
-1. Ensure the script is executable: `chmod +x daily_report.sh`
-2. Open crontab: `crontab -e`
-3. Add the following entry (example for daily run at 08:00):
+### 4. Cronjob Setup
+
+```bash
+chmod +x daily_report.sh
+crontab -e
+```
+
+Add a daily entry (example: 08:00):
+
 ```cron
 0 8 * * * /path/to/your/project/daily_report.sh >> /path/to/your/project/cron_output.log 2>&1
 ```
 
-*Note: The script logs all details additionally in `logs/runs/`.*
+> **Note:** The script clears `PYTHONPATH` before execution to prevent Hermes-Agent virtualenv leakage.
 
 ## 📈 Roadmap (V2)
-- [ ] **Real API Integration:** Replace scraping with professional financial APIs (e.g., *Alpha Vantage* or *Polygon.io*).
-- [ ] **Extended Data Sources:** Integration of crypto data and VC funding news.
-- [ ] **Visualization:** Dashboard for displaying the score history.
+
+- [ ] **Professional API Integration:** Replace yfinance scraping with Alpha Vantage or Polygon.io.
+- [ ] **Extended Data Sources:** Crypto data and VC funding news integration.
+- [ ] **Visualization Dashboard:** Score history display.
+- [ ] **Discord / Slack Delivery:** Multi-channel output support.
 
 ---
 *Developed with Hermes Agent (by Nous Research)*
