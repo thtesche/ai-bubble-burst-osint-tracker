@@ -122,21 +122,29 @@ def test_pipeline_runs_successfully_with_mocks():
     # LLM may or may not have run (depends on API key), so llm_content can be empty
 
 
+def _count_log_files(base_dir: str) -> int:
+    """Recursively count _search_results.json and run_summary.json files under base_dir."""
+    count = 0
+    for root, dirs, files in os.walk(base_dir):
+        for f in files:
+            if f.endswith("_search_results.json") or f == "run_summary.json":
+                count += 1
+    return count
+
+
 def test_pipeline_creates_log_file():
-    """Pipeline must create a JSON log file in the logs/runs/ directory."""
+    """Pipeline must create JSON log files in logs/runs/<timestamp>/ via RunLogger."""
     log_dir = os.path.join(project_root, "logs", "runs")
     os.makedirs(log_dir, exist_ok=True)
-    
-    # Delete old logs for clean test
-    for f in os.listdir(log_dir):
-        if f.startswith("googlenews_raw_"):
-            os.remove(os.path.join(log_dir, f))
-    
-    before_count = len([f for f in os.listdir(log_dir) if f.startswith("googlenews_raw_")])
-    
+
+    # Ensure RunLogger uses the correct project root (matches test's log_dir)
+    os.environ["PROJECT_ROOT"] = project_root
+
+    before_count = _count_log_files(log_dir)
+
     mock_news = SuccessMockGoogleNewsFetcher()
     mock_market = MockMarketDataFetcher()
-    
+
     # Run pipeline
     asyncio.run(
         run_pipeline(
@@ -145,9 +153,12 @@ def test_pipeline_creates_log_file():
             market_fetcher=mock_market
         )
     )
-    
-    after_count = len([f for f in os.listdir(log_dir) if f.startswith("googlenews_raw_")])
-    assert after_count > before_count, "Pipeline must create a new log file"
+
+    after_count = _count_log_files(log_dir)
+    assert after_count > before_count, (
+        f"Pipeline must create log files via RunLogger: "
+        f"before={before_count}, after={after_count}"
+    )
 
 
 def test_default_fetchers_when_none_provided():

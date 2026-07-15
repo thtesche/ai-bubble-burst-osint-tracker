@@ -15,6 +15,7 @@ if project_root not in sys.path:
 from src.fetchers.googlenews import GoogleNewsFetcher
 from src.fetchers.market import MarketDataFetcher
 from src.core.engine import ScoringEngine
+from src.core.logger import RunLogger
 from src.inference import LLMEngine, LLMResponse, build_system_prompt, build_user_prompt
 
 
@@ -150,6 +151,9 @@ async def run_pipeline(
 
     print("=== STARTING LIVE DATA ===")
 
+    # 0. Setup Logger
+    logger = RunLogger()
+    
     # 1. Setup (Dependency Injection)
     engine = ScoringEngine()
     
@@ -179,17 +183,8 @@ async def run_pipeline(
 
     print(f"[+] Google News: {len(googlenews_articles)} articles (total 24h results: {googlenews_total})")
 
-    # Save Google News to JSON for quality inspection
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    actual_root = os.path.dirname(os.path.dirname(current_dir))
-    log_dir = os.path.join(actual_root, "logs", "runs")
-    os.makedirs(log_dir, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    googlenews_json_path = os.path.join(log_dir, f"googlenews_raw_{timestamp}.json")
-
-    with open(googlenews_json_path, "w", encoding="utf-8") as f:
-        json.dump(googlenews_data, f, indent=4, ensure_ascii=False)
-    print(f"[+] Google News data saved to: {googlenews_json_path}")
+    # Save Google News to logger (replaces hardcoded file logic)
+    logger.save_search_results("googlenews", googlenews_data)
 
     # 3. Real Market Fetching (prices + CapEx)
     print("\n[*] Step 2: Fetching market data via yfinance...")
@@ -197,6 +192,8 @@ async def run_pipeline(
 
     if not market_metrics:
         print("[!] WARNING: No market data available. Continuing with news-only analysis.")
+    else:
+        logger.save_search_results("market", market_metrics)
 
     # 3b. CapEx Fetching
     print("\n[*] Step 2b: Fetching CapEx data via yfinance...")
@@ -206,6 +203,7 @@ async def run_pipeline(
     if capex_data:
         print(f"[+] Successfully fetched CapEx data for {len(capex_data)} tickers")
         print(f"    CapEx Score (bubble risk): {capex_score:.4f}")
+        logger.save_search_results("capex", capex_data)
     else:
         print("[!] WARNING: No CapEx data available. Score defaults to neutral (0.5).")
         capex_score = 0.5
@@ -224,9 +222,20 @@ async def run_pipeline(
     )
     print(f"\n[!!!] FINAL REAL BUBBLE SCORE: {final_bubble_score:.2f}%")
 
+    # Save scores to logger
+    scores = {
+        "final_bubble_score": final_bubble_score,
+        "sentiment_score": sentiment_score,
+        "market_score": market_score,
+        "capex_score": capex_score,
+    }
+    logger.save_search_results("scores", scores)
+
     # 4.5 LLM Inference (Optional — gracefully skipped if API unavailable)
     llm_content = ""
     llm_model = ""
+    llm_success = False
+    llm_error = None
     try:
         llm_engine = LLMEngine()
         print("\n[*] Step 4.5: Running LLM-based risk evaluation...")
@@ -255,18 +264,40 @@ async def run_pipeline(
             print("[+] LLM risk evaluation completed successfully")
             llm_content = llm_response.content or ""
             llm_model = llm_response.model or ""
+            llm_success = True
         else:
             print(f"[!] LLM inference failed: {llm_response.error}")
+            llm_error = llm_response.error
     except Exception as e:
         print(f"[!] LLM inference error: {e}")
+        llm_error = str(e)
 
     print("=== E2E TEST COMPLETE ===")
+
+    # Save LLM result to logger (if any)
+    if llm_content or llm_error:
+        logger.save_content("llm", llm_model or "unknown", llm_content or f"ERROR: {llm_error}")
 
     # Generate report string for console output (legacy)
     report = _generate_report(
         final_bubble_score, sentiment_score, market_score, capex_score,
         [], googlenews_data, market_metrics, capex_data
     )
+
+    # Build and save run summary via logger
+    run_summary = {
+        "timestamp": logger.timestamp,
+        "query": query,
+        "bubble_score": final_bubble_score,
+        "sentiment_score": sentiment_score,
+        "market_score": market_score,
+        "capex_score": capex_score,
+        "num_articles": len(googlenews_articles),
+        "llm_model": llm_model,
+        "llm_success": llm_success,
+        "llm_content": llm_content,
+    }
+    logger.save_summary(run_summary)
 
     return PipelineResult(
         bubble_score=final_bubble_score,
