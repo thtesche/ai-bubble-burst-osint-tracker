@@ -1,0 +1,61 @@
+Listed directory 20260716_120528
+Listed directory ai-bubble-burst-osint-tracker
+Viewed run_summary.json:1-12
+Listed directory src
+Viewed main.py:1-83
+Viewed full_pipeline_live.py:1-494
+Viewed market_search_results.json:1-62
+Viewed capex_search_results.json:1-254
+Viewed market.py:1-355
+Viewed article_sentiments.json:1-68
+
+Ich habe mir die Ergebnisse des Runs sowie den zugrundeliegenden Code (insbesondere `full_pipeline_live.py` und `market.py`) angesehen. Hier ist meine Bewertung zur Korrektheit, zu den Fehlern/logischen Inkonsistenzen und zu möglichen Erweiterungen.
+
+### Was ist schon richtig und funktioniert gut?
+
+1. **Struktur und Datenbeschaffung**: Die Pipeline ist solide aufgebaut. Die Daten von yfinance (CapEx und Kurse) werden erfolgreich bezogen.
+2. **CapEx Scoring Logik**: Das Berechnen des `capex_score` in `calculate_capex_score` (wobei ein Anstieg der CapEx-Ausgaben zu einem höheren Blasenrisiko-Score führt) ist eine sehr gute und funktionale Metrik für Überinvestitionen. Das Ergebnis (Score von 0.8790) fängt den massiven Aufbau von Infrastruktur bei Firmen wie Microsoft und Amazon sehr gut ein.
+3. **LLM Sentiment Analyse**: Die Extraktion aus Google News und die Bewertung durch das LLM in `article_sentiments.json` funktioniert exzellent. Das LLM hat bearishe Artikel wie "Will the stock market crash?" absolut korrekt mit niedrigen Scores (0.05 - 0.15) versehen.
+4. **Die LLM Schlussfolgerung (run_summary.json)**: Die Analyse des LLMs am Ende (im Feld `llm_content`) ist inhaltlich hervorragend. Es erkennt die **Divergenz** zwischen extremen Ausgaben (CapEx) und dem schlechten Sentiment/fallenden Hardware-Kursen und leitet daraus logisch eine hohe Korrekturwahrscheinlichkeit ab (65%).
+
+---
+
+### Wo gibt es Fehler und logische Inkonsistenzen?
+
+Die größte Schwäche des aktuellen Systems liegt in der mathematischen Formel für den finalen `bubble_score`. Die Metriken verhalten sich logisch widersprüchlich zueinander:
+
+1. **Die Sentiment-Score Logik ist verdreht**: 
+   * Laut System-Prompt bedeutet `0.0` = *bearish/Crash-Gefahr* und `1.0` = *bullish/Euphorie*.
+   * In `full_pipeline_live.py` (Zeile 391) wird der Score addiert: `final_bubble_score = (mean_sentiment_score * 0.4) + ...`
+   * Das bedeutet: Ein *sehr schlechtes, panisches Sentiment* (0.21) drückt den finalen Bubble-Score **nach unten** (verringert ihn). Das LLM interpretiert dieses niedrige Sentiment zwar als Gefahr (was richtig ist), aber in deiner Metrik sorgt die Panik dafür, dass der Score sinkt (aktuell 49,8%). Wenn du das Risiko eines Crashs messen willst, müsste ein extrem bearishes Sentiment den Risiko-Score eigentlich *erhöhen* (oder man kehrt den Wert per `1 - sentiment_score` um).
+
+2. **Die Market-Score Logik (5-Tages-Trend)**:
+   * In `market.py` (`calculate_market_score`) ergibt ein Kursrückgang von -5% einen Score von `1.0` (maximales Risiko). Ein Kursanstieg von +5% ergibt einen Score von `0.0` (geringes Risiko).
+   * **Problem:** Eine klassische Blase ist geprägt von massiven Kurs**anstiegen** (Euphorie). Wenn der Score bei Kursgewinnen auf 0 sinkt, misst der Score nicht die "Blasen-Bildung", sondern nur, ob die Kurse *aktuell schon fallen* (also der Burst bereits im Gange ist). 
+   * Es führt zu einem Paradoxon in deiner Formel: Wenn alles massiv steigt (+5% Kurs, 1.0 Sentiment), ist der Market Score 0 und der Sentiment Score pusht den Wert nach oben.
+
+3. **Gefährliche Mittelwertbildung**:
+   Die einfache Addition `(Sentiment*0.4) + (Market*0.2) + (CapEx*0.4)` maskiert die Realität. Ein extrem hohes CapEx (0.87) und ein extrem negatives Sentiment (0.21) mitteln sich zu 0.49 (Moderate Risk) heraus. Genau diese *Divergenz* (hohe Ausgaben bei kippender Stimmung) ist aber der gefährlichste Moment einer Blase.
+
+---
+
+### Was könnte man erweitern / verbessern?
+
+**1. Definition des Scores schärfen (Korrektur der Metrik)**
+Du solltest entscheiden, was der Score genau anzeigt:
+* **Option A (Bubble Formation Score)**: Misst, wie sehr der Markt überhitzt ist. Dann muss ein hoher Kursgewinn und ein euphorisches Sentiment (1.0) zu einem *hohen* Score führen.
+* **Option B (Burst Risk Score)**: Misst die akute Gefahr, dass die Blase *jetzt* platzt. Dann sind hohe CapEx gepaart mit *kippendem/schlechtem* Sentiment und *fallenden* Kursen gefährlich. Hierfür müsstest du in der Formel das Sentiment invertieren: `( (1.0 - mean_sentiment_score) * 0.4)`.
+
+**2. Divergenzen statt Durchschnitte belohnen**
+Statt einer simplen linearen Formel könntest du einen Multiplikator für Divergenzen einführen. Zum Beispiel:
+```python
+# Wenn viel investiert wird (CapEx hoch), aber die Preise fallen (Market Score signalisiert Schwäche)
+if capex_score > 0.7 and market_score > 0.7:  
+    final_bubble_score *= 1.25  # Strafe für Divergenz
+```
+
+**3. Bessere Markt-Metriken (Langfristigkeit)**
+Ein 5-Tage-Fenster (`five_day_change_percent`) ist zu volatil für eine Makro-Blasenanalyse. Es ist besser, den Preisabstand zum **200-Tage-Schnitt (SMA 200)** oder die **Year-to-Date (YTD) Performance** heranzuziehen. Blasen erkennt man oft daran, dass Tech-Werte 50-100% über ihrem historischen gleitenden Durchschnitt notieren.
+
+**4. CapEx in Relation setzen (CapEx vs. Revenue/FCF)**
+Aktuell wird nur das *Wachstum* der absoluten CapEx-Summe bestraft. Wenn aber z.B. Nvidia oder Microsoft ihren Umsatz parallel verdoppeln, ist eine CapEx-Erhöhung fundamental gerechtfertigt und keine Blase. Du könntest zusätzlich den **Free Cash Flow** (der ja bereits in der JSON steht!) ins Verhältnis setzen. Eine stark wachsende Schere (hohes CapEx, aber sinkender Free Cash Flow) ist ein viel härterer Indikator für toxisches Blasen-Verhalten.
