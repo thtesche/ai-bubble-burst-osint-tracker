@@ -1,6 +1,7 @@
 """Tests for LLM-based per-article sentiment analysis."""
 import sys
 import os
+import json
 import asyncio
 import pytest
 
@@ -66,7 +67,8 @@ async def test_analyze_sentiment_bearish_article():
     assert "sentiment_score" in result
     assert "reason" in result
 
-    # Without API key, LLM fails → fallback is 0.5 (neutral)
+    # With an LLM key present, bearish articles should score < 0.5
+    # Without LLM key, fallback is 0.5 (neutral)
     print(f"  Bearish article sentiment score: {result['sentiment_score']:.3f}")
 
 
@@ -124,8 +126,10 @@ async def test_analyze_sentiment_missing_content():
 
 
 @pytest.mark.asyncio
-async def test_analyze_sentiment_clamped():
+async def test_analyze_sentiment_json_clamped():
     """Sentiment score must be clamped to [0.0, 1.0]."""
+    # If LLM returns a value outside the range, it should be clamped.
+    # We can test this by checking the fallback path (LLM error → 0.5).
     article = {
         "title": "Test",
         "origin_url": "https://example.com/test",

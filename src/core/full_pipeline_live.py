@@ -14,7 +14,6 @@ if project_root not in sys.path:
 
 from src.fetchers.googlenews import GoogleNewsFetcher
 from src.fetchers.market import MarketDataFetcher
-from src.core.engine import ScoringEngine
 from src.core.logger import RunLogger
 from src.inference import LLMEngine, LLMResponse, build_system_prompt, build_user_prompt
 
@@ -65,11 +64,113 @@ class PipelineResult:
     googlenews_articles: list[dict]
     llm_content: str = ""
     llm_model: str = ""
+    article_sentiments: list[dict] | None = None
 
 
 class PipelineError(Exception):
     """Raised when the pipeline cannot proceed due to missing or invalid data."""
     pass
+
+
+_SENTIMENT_SYSTEM_PROMPT = (
+    "You are a sentiment analysis expert. Given a news article text, "
+    "assign a sentiment score between 0.0 and 1.0 based on the article's "
+    "stance toward the AI market/tech sector.\n\n"
+    "Scoring rubric (directed at AI bubble risk):\n"
+    "- 0.0 = strongly bearish: article warns of AI bubble, describes "
+    "speculative mania, overvaluation, impending crash\n"
+    "- 0.5 = neutral: balanced reporting, no clear bullish or bearish bias\n"
+    "- 1.0 = strongly bullish: article praises AI growth, calls it "
+    "revolutionary, discusses explosive growth\n\n"
+    "Output ONLY a JSON object with the following structure — no "
+    "explanations, no reasoning:\n"
+    "{'sentiment_score': <float 0-1>, 'reason': '<short 1-2 sentence "
+    "reasoning>'}\n"
+)
+
+
+def _build_sentiment_user_prompt(title: str, content: str) -> str:
+    """Build the user prompt for a single article's sentiment analysis."""
+    return (
+        f"Article Title: {title}\n\n"
+        f"Article Content (truncated to ~4000 chars):\n"
+        f"{content[:4000]}\n"
+        f"\nAnalyze the sentiment of this article regarding the AI market/tech sector."
+    )
+
+
+async def _analyze_sentiment_by_article(
+    article: dict,
+    llm_engine: LLMEngine,
+) -> dict:
+    """
+    Call the LLM for ONE article and return structured sentiment data.
+
+    Returns:
+        {
+            'url': str (origin_url or link),
+            'title': str,
+            'content': str (truncated to 2000 chars),
+            'sentiment_score': float,
+            'reason': str
+        }
+    """
+    url = article.get("origin_url") or article.get("link", "")
+    title = article.get("title", "No Title")
+    # Prefer Firecrawl-scraped content (full markdown); fall back to description
+    content = article.get("content") or article.get("description", "")
+
+    try:
+        response = await llm_engine.generate_async(
+            prompt=_build_sentiment_user_prompt(title, content),
+            system_prompt=_SENTIMENT_SYSTEM_PROMPT,
+        )
+
+        if response.is_success and response.content:
+            # Extract JSON from the LLM response (handle possible markdown fences)
+            raw = response.content.strip()
+            # Strip markdown code fences if present
+            if raw.startswith("```"):
+                raw = raw.strip("`").strip()
+                if raw.startswith("json"):
+                    raw = raw[4:].strip()
+            parsed = json.loads(raw)
+            score = float(parsed.get("sentiment_score", 0.5))
+            score = max(0.0, min(1.0, score))  # clamp
+            return {
+                "url": url,
+                "title": title,
+                "content": content[:2000],  # keep content for reference
+                "sentiment_score": score,
+                "reason": parsed.get("reason", ""),
+            }
+        else:
+            print(f"[!] LLM sentiment failed for '{title}': {response.error}")
+            return {
+                "url": url,
+                "title": title,
+                "content": content[:2000],
+                "sentiment_score": 0.5,  # fallback: neutral
+                "reason": f"LLM error: {response.error}",
+            }
+    except json.JSONDecodeError as e:
+        print(f"[!] JSON parse error for '{title}': {e}")
+        return {
+            "url": url,
+            "title": title,
+            "content": content[:2000],
+            "sentiment_score": 0.5,
+            "reason": f"JSON parse error: {e}",
+        }
+    except Exception as e:
+        print(f"[!] Unexpected error for '{title}': {e}")
+        return {
+            "url": url,
+            "title": title,
+            "content": content[:2000],
+            "sentiment_score": 0.5,
+            "reason": f"Unexpected error: {e}",
+        }
 
 
 def _generate_report(final_bubble_score: float, sentiment_score: float,
@@ -188,19 +289,16 @@ async def run_pipeline(
 
     # 0. Setup Logger
     logger = RunLogger()
-    
-    # 1. Setup (Dependency Injection)
-    engine = ScoringEngine()
-    
+
     if googlenews_fetcher is None:
         googlenews_fetcher = GoogleNewsFetcher(
             query=query, limit=10
         )
-        
+
     if market_fetcher is None:
         market_fetcher = MarketDataFetcher(tickers=tickers)
 
-    # 2. Google News Fetching (async now — scrapes URLs with Firecrawl internally)
+    # 1. Google News Fetching (async now — scrapes URLs with Firecrawl internally)
     print("\n[*] Step 1: Fetching news via Google News RSS + Firecrawl...")
     googlenews_data = await googlenews_fetcher.fetch_articles()
 
@@ -209,19 +307,13 @@ async def run_pipeline(
 
     googlenews_articles = googlenews_data.get("articles", [])
     googlenews_total = googlenews_data.get("total_results", 0)
-    
-    # Extract contents for the scoring engine
-    googlenews_contents = [
-        a.get("content", a.get("description", ""))
-        for a in googlenews_articles
-    ]
 
     print(f"[+] Google News: {len(googlenews_articles)} articles (total 24h results: {googlenews_total})")
 
     # Save Google News to logger (replaces hardcoded file logic)
     logger.save_search_results("googlenews", googlenews_data)
 
-    # 3. Real Market Fetching (prices + CapEx)
+    # 2. Real Market Fetching (prices + CapEx)
     print("\n[*] Step 2: Fetching market data via yfinance...")
     market_metrics = market_fetcher.fetch_market_metrics()
 
@@ -230,7 +322,7 @@ async def run_pipeline(
     else:
         logger.save_search_results("market", market_metrics)
 
-    # 3b. CapEx Fetching
+    # 2b. CapEx Fetching
     print("\n[*] Step 2b: Fetching CapEx data via yfinance...")
     capex_data = market_fetcher.fetch_capex_data()
     capex_score = market_fetcher.calculate_capex_score(capex_data)
@@ -244,36 +336,77 @@ async def run_pipeline(
         print("[!] WARNING: No CapEx data available. Score defaults to neutral (0.5).")
         capex_score = 0.5
 
-    # 4. Scoring
-    print("\n[*] Step 3: Calculating REAL score...")
-    sentiment_score = engine.analyze_sentiment(googlenews_contents)
+    # 3. LLM-based Sentiment Analysis (per article)
+    print("\n[*] Step 3: Running LLM-based sentiment analysis per article...")
+
+    # Reuse a single LLMEngine for both sentiment and final risk evaluation
+    llm_engine = LLMEngine()
+
+    # Run sentiment for all articles in parallel (concurrent futures)
+    tasks = [_analyze_sentiment_by_article(article, llm_engine) for article in googlenews_articles]
+    article_sentiments: list[dict] = await asyncio.gather(*tasks)
+
+    # Calculate mean sentiment score
+    mean_sentiment_score = (
+        sum(a["sentiment_score"] for a in article_sentiments) / len(article_sentiments)
+        if article_sentiments else 0.5
+    )
+
+    print(f"    Article-level sentiment scores:")
+    for i, a in enumerate(article_sentiments, 1):
+        print(f"      [{i}] {a['title'][:60]}... → {a['sentiment_score']:.3f}")
+    print(f"    Mean Sentiment Score: {mean_sentiment_score:.4f}")
+
+    # Save per-article sentiment JSON to logs
+    sentiment_json_path = os.path.join(
+        logger.run_dir, "article_sentiments.json"
+    )
+    sentiment_json_data = {
+        "timestamp": logger.timestamp,
+        "query": query,
+        "num_articles": len(article_sentiments),
+        "mean_sentiment_score": round(mean_sentiment_score, 4),
+        "articles": [
+            {
+                "url": a["url"],
+                "title": a["title"],
+                "sentiment_score": a["sentiment_score"],
+                "reason": a["reason"],
+            }
+            for a in article_sentiments
+        ],
+    }
+    with open(sentiment_json_path, 'w', encoding='utf-8') as f:
+        json.dump(sentiment_json_data, f, indent=4, ensure_ascii=False)
+    print(f"[LOG] Article sentiment results saved to {sentiment_json_path}")
+
+    # 4. Bubble Score (reuses mean_sentiment_score from step 3)
+    print("\n[*] Step 4: Calculating final bubble score...")
     market_score = market_fetcher.calculate_market_score(market_metrics)
 
-    print(f"    Real Sentiment Score: {sentiment_score:.4f}")
-    print(f"    Real Market Score:    {market_score:.4f}")
-    print(f"    CapEx Score:          {capex_score:.4f}")
+    print(f"    Mean Sentiment Score: {mean_sentiment_score:.4f}")
+    print(f"    Market Score:       {market_score:.4f}")
+    print(f"    CapEx Score:        {capex_score:.4f}")
 
-    final_bubble_score = engine.calculate_final_score(
-        sentiment_score, market_score, capex_score
-    )
+    final_bubble_score = (mean_sentiment_score * 0.4) + (market_score * 0.2) + (capex_score * 0.4)
+    final_bubble_score *= 100
     print(f"\n[!!!] FINAL REAL BUBBLE SCORE: {final_bubble_score:.2f}%")
 
     # Save scores to logger
     scores = {
         "final_bubble_score": final_bubble_score,
-        "sentiment_score": sentiment_score,
+        "sentiment_score": mean_sentiment_score,
         "market_score": market_score,
         "capex_score": capex_score,
     }
     logger.save_search_results("scores", scores)
 
-    # 4.5 LLM Inference (Optional — gracefully skipped if API unavailable)
+    # 4.5 LLM Risk Evaluation (Optional — gracefully skipped if API unavailable)
     llm_content = ""
     llm_model = ""
     llm_success = False
     llm_error = None
     try:
-        llm_engine = LLMEngine()
         print("\n[*] Step 4.5: Running LLM-based risk evaluation...")
         system_prompt = build_system_prompt()
         market_summary = ""
@@ -286,7 +419,7 @@ async def run_pipeline(
                 )
         user_prompt = build_user_prompt(
             bubble_score=final_bubble_score,
-            sentiment_score=sentiment_score,
+            sentiment_score=mean_sentiment_score,
             market_score=market_score,
             capex_score=capex_score,
             findings=None,
@@ -316,7 +449,7 @@ async def run_pipeline(
 
     # Generate report string for console output (legacy)
     report = _generate_report(
-        final_bubble_score, sentiment_score, market_score, capex_score,
+        final_bubble_score, mean_sentiment_score, market_score, capex_score,
         [], googlenews_data, market_metrics, capex_data
     )
 
@@ -325,7 +458,7 @@ async def run_pipeline(
         "timestamp": logger.timestamp,
         "query": query,
         "bubble_score": final_bubble_score,
-        "sentiment_score": sentiment_score,
+        "sentiment_score": mean_sentiment_score,
         "market_score": market_score,
         "capex_score": capex_score,
         "num_articles": len(googlenews_articles),
@@ -337,7 +470,7 @@ async def run_pipeline(
 
     return PipelineResult(
         bubble_score=final_bubble_score,
-        sentiment_score=sentiment_score,
+        sentiment_score=mean_sentiment_score,
         market_score=market_score,
         capex_score=capex_score,
         market_metrics=market_metrics,
@@ -345,6 +478,7 @@ async def run_pipeline(
         googlenews_articles=googlenews_articles,
         llm_content=llm_content,
         llm_model=llm_model,
+        article_sentiments=article_sentiments,  # now available on PipelineResult
     )
 
 
