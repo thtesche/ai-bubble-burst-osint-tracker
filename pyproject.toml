@@ -12,6 +12,7 @@ dependencies = [
     "firecrawl-py",
     "openai>=1.0.0",
     "pytest>=7.0.0",
+    "pytest-asyncio>=0.23.0",
 ]
 
 [tool.pytest.ini_options]
