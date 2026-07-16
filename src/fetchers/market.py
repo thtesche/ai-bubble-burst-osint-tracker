@@ -96,7 +96,16 @@ class MarketDataFetcher:
 
                 close_series = hist["Close"]
                 price_5d_ago = close_series.iloc[0]
-                daily_percent = ((current_price - close_series.iloc[-1]) / close_series.iloc[-1]) * 100
+
+                if len(close_series) < 2:
+                    daily_percent = 0.0
+                else:
+                    # Compare last close to previous day's close (standard daily change)
+                    daily_percent = (
+                        (close_series.iloc[-1] - close_series.iloc[-2])
+                        / close_series.iloc[-2]
+                    ) * 100
+
                 five_day_percent = ((current_price - price_5d_ago) / price_5d_ago) * 100
 
                 print(f"[+] {ticker}: ${current_price:.2f} (5d: {five_day_percent:+.2f}%)")
