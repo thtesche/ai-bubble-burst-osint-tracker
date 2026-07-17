@@ -339,16 +339,30 @@ class MarketDataFetcher:
         return sum(ticker_scores) / len(ticker_scores) if ticker_scores else 0.5
 
     def calculate_market_score(self, metrics: dict) -> float:
-        """Calculates a score (0-1) based on market performance."""
+        """
+        Calculates a score (0-1) based on market performance.
+        0 = stable/low risk (flat or modest changes), 1 = high risk.
+
+        Risk comes from extreme moves in EITHER direction:
+        - Massive gains (+5% 5d+) → euphoria / bubble formation
+        - Massive losses (-5% 5d+) → potential burst
+
+        Returns a U-shaped curve: stability = low score, extremes = high score.
+        """
         if not metrics:
             return 0.5
 
         changes = [m["five_day_change_percent"] for m in metrics.values()]
         avg_change = sum(changes) / len(changes)
 
-        if avg_change <= -5:
-            return 1.0
-        elif avg_change >= 5:
+        # Map absolute deviation to risk score (U-shaped):
+        #   |change| <= 5  →  0.0  (stable, low risk)
+        #   |change| >= 10 →  1.0  (extreme, high risk)
+        #   5 < |change| < 10 → linear interpolation
+        abs_change = abs(avg_change)
+        if abs_change <= 5:
             return 0.0
+        elif abs_change >= 10:
+            return 1.0
         else:
-            return 0.5 - (avg_change / 10.0)
+            return (abs_change - 5.0) / 5.0
