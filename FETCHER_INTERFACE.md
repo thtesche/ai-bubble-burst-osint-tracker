@@ -51,7 +51,8 @@ class MarketDataFetcher:
             "AAPL": {
                 "current_price_dollar": float,
                 "daily_change_percent": float,
-                "five_day_change_percent": float
+                "distance_from_sma_200_percent": float,  # Preisabstand zum 200-Tage-SMA
+                "ytd_change_percent": float              # Year-to-Date Performance
             },
             ...
         }
@@ -118,7 +119,8 @@ class MockMarketDataFetcher:
             "AAPL": {
                 "current_price_dollar": 150.0,
                 "daily_change_percent": 1.0,
-                "five_day_change_percent": 2.0,
+                "distance_from_sma_200_percent": 15.0,
+                "ytd_change_percent": 25.0,
             }
         }
 

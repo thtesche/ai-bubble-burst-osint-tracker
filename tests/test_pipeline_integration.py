@@ -69,7 +69,8 @@ class MockMarketDataFetcher:
             "AAPL": {
                 "current_price_dollar": 150.0,
                 "daily_change_percent": 1.0,
-                "five_day_change_percent": 2.0
+                "distance_from_sma_200_percent": 15.0,
+                "ytd_change_percent": 25.0,
             }
         }
     

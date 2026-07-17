@@ -140,7 +140,8 @@ class TelegramDelivery:
                 market_text += (
                     f"- **{ticker}**: ${data['current_price_dollar']:.2f} "
                     f"(daily: {data['daily_change_percent']:+.2f}%, "
-                    f"5d: {data['five_day_change_percent']:+.2f}%)\n"
+                    f"SMA 200: {data['distance_from_sma_200_percent']:+.2f}%, "
+                    f"YTD: {data['ytd_change_percent']:+.2f}%)\n"
                 )
             chunks = split_telegram_message(market_text)
             for chunk in chunks:

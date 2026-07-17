@@ -63,7 +63,8 @@ class MarketDataFetcher:
 
     def fetch_market_metrics(self) -> dict:
         """
-        Fetches current prices and 5-day change via yfinance.
+        Fetches current prices, 200-day SMA distance, and Year-to-Date performance
+        via yfinance. 5-day change replaced by macro-stable indicators.
         Failed tickers are skipped (no fake, no crash).
         """
         self._ensure_yfinance_import()
@@ -86,33 +87,54 @@ class MarketDataFetcher:
                 if current_price is None:
                     raise ValueError(f"No price found for {ticker}")
 
-                # History for 5-day change
+                # History for 200-day SMA and YTD (need ~250 trading days)
                 end = datetime.now()
-                start = end - timedelta(days=35)  # ~5 trading days buffer
+                start = end - timedelta(days=280)  # ~250 trading days
                 hist = stock.history(start=start, end=end)
 
                 if hist.empty:
                     raise ValueError(f"No history found for {ticker}")
 
                 close_series = hist["Close"]
-                price_5d_ago = close_series.iloc[0]
 
+                # Daily change (last close vs previous close)
                 if len(close_series) < 2:
                     daily_percent = 0.0
                 else:
-                    # Compare last close to previous day's close (standard daily change)
                     daily_percent = (
                         (close_series.iloc[-1] - close_series.iloc[-2])
                         / close_series.iloc[-2]
                     ) * 100
 
-                five_day_percent = ((current_price - price_5d_ago) / price_5d_ago) * 100
+                # 200-day Simple Moving Average
+                if len(close_series) >= 200:
+                    sma_200 = close_series.iloc[-200:].mean()
+                    distance_from_sma_200 = (
+                        (current_price - sma_200) / sma_200
+                    ) * 100
+                else:
+                    # Not enough data — use shorter window (at least 50 days)
+                    lookback = max(len(close_series) - 1, 50)
+                    sma_200 = close_series.iloc[-lookback:].mean()
+                    distance_from_sma_200 = (
+                        (current_price - sma_200) / sma_200
+                    ) * 100
 
-                print(f"[+] {ticker}: ${current_price:.2f} (5d: {five_day_percent:+.2f}%)")
+                # Year-to-Date performance
+                ytd_start = end.replace(month=1, day=1)
+                ytd_hist = stock.history(start=ytd_start, end=end)
+                if not ytd_hist.empty:
+                    ytd_close = ytd_hist["Close"].iloc[0]
+                    ytd_percent = ((current_price - ytd_close) / ytd_close) * 100
+                else:
+                    ytd_percent = 0.0  # No YTD data (new listing)
+
+                print(f"[+] {ticker}: ${current_price:.2f} (SMA 200 dist: {distance_from_sma_200:+.2f}%, YTD: {ytd_percent:+.2f}%)")
                 results[ticker] = {
                     "current_price_dollar": float(round(current_price, 2)),
                     "daily_change_percent": float(round(daily_percent, 2)),
-                    "five_day_change_percent": float(round(five_day_percent, 2)),
+                    "distance_from_sma_200_percent": float(round(distance_from_sma_200, 2)),
+                    "ytd_change_percent": float(round(ytd_percent, 2)),
                 }
 
             except Exception as e:
@@ -340,29 +362,50 @@ class MarketDataFetcher:
 
     def calculate_market_score(self, metrics: dict) -> float:
         """
-        Calculates a score (0-1) based on market performance.
-        0 = stable/low risk (flat or modest changes), 1 = high risk.
+        Calculates a macro-market bubble score (0-1) based on long-term indicators.
+        0 = stable/low risk, 1 = high bubble risk.
 
-        Risk comes from extreme moves in EITHER direction:
-        - Massive gains (+5% 5d+) → euphoria / bubble formation
-        - Massive losses (-5% 5d+) → potential burst
+        Uses two long-term indicators:
+        1. Distance from 200-day SMA (SMA 200):
+           - 0-20% above → 0.0 risk (fairly valued)
+           - 20-50% above → 0.0-1.0 (bubble territory, linear scale)
+           - 50%+ above → 1.0 (extreme overvaluation)
+           - Price below SMA 200 → 0.0 (not in bubble)
 
-        Returns a U-shaped curve: stability = low score, extremes = high score.
+        2. Year-to-Date (YTD) performance:
+           - 0-30% YTD → 0.0 risk (reasonable growth)
+           - 30-70% YTD → 0.0-1.0 (exuberant, linear scale)
+           - 70%+ YTD → 1.0 (extreme YTD surge)
+
+        Both indicators are averaged for the final score.
+        Returns 0.5 (neutral) if no data available.
         """
         if not metrics:
             return 0.5
 
-        changes = [m["five_day_change_percent"] for m in metrics.values()]
-        avg_change = sum(changes) / len(changes)
+        sma_scores = []
+        ytd_scores = []
 
-        # Map absolute deviation to risk score (U-shaped):
-        #   |change| <= 5  →  0.0  (stable, low risk)
-        #   |change| >= 10 →  1.0  (extreme, high risk)
-        #   5 < |change| < 10 → linear interpolation
-        abs_change = abs(avg_change)
-        if abs_change <= 5:
-            return 0.0
-        elif abs_change >= 10:
-            return 1.0
-        else:
-            return (abs_change - 5.0) / 5.0
+        for ticker, data in metrics.items():
+            # — SMA 200 distance score —
+            dist_from_sma = data.get("distance_from_sma_200_percent", 0.0)
+            if dist_from_sma <= 20:
+                sma_scores.append(0.0)
+            elif dist_from_sma >= 50:
+                sma_scores.append(1.0)
+            else:
+                sma_scores.append((dist_from_sma - 20.0) / 30.0)
+
+            # — YTD performance score —
+            ytd = data.get("ytd_change_percent", 0.0)
+            if ytd <= 30:
+                ytd_scores.append(0.0)
+            elif ytd >= 70:
+                ytd_scores.append(1.0)
+            else:
+                ytd_scores.append((ytd - 30.0) / 40.0)
+
+        avg_sma = sum(sma_scores) / len(sma_scores) if sma_scores else 0.0
+        avg_ytd = sum(ytd_scores) / len(ytd_scores) if ytd_scores else 0.0
+
+        return (avg_sma + avg_ytd) / 2.0
