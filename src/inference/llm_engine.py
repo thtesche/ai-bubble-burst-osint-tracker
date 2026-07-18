@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import httpx
 from typing import Optional, Dict, Any, AsyncIterator, Tuple
 from dataclasses import dataclass, field
@@ -80,6 +81,9 @@ class LLMEngine:
                     )
 
                 content = choices[0].get("message", {}).get("content", "")
+                if content:
+                    content = re.sub(r"<thinking>.*?</thinking>\s*", "", content, flags=re.DOTALL)
+                
                 usage = data.get("usage", {})
 
                 return LLMResponse(
