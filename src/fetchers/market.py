@@ -195,12 +195,22 @@ class MarketDataFetcher:
                 except KeyError:
                     capex_data["quarterly_capex"] = self._extract_capex_from_index(quarterly_cashflow)
 
-                # Free Cash Flow optionally included
+                # Free Cash Flow - annual
                 try:
                     annual_fcf = annual_cashflow.loc["Free Cash Flow"]
                     capex_data["annual_free_cash_flow"] = {
                         str(year): _extract_scalar(val)
                         for year, val in annual_fcf.dropna().items()
+                    }
+                except KeyError:
+                    pass  # Optional, not critical
+
+                # Free Cash Flow - quarterly (for CapEx/FCF growth comparison)
+                try:
+                    quarterly_fcf = quarterly_cashflow.loc["Free Cash Flow"]
+                    capex_data["quarterly_free_cash_flow"] = {
+                        str(q): _extract_scalar(val)
+                        for q, val in quarterly_fcf.dropna().items()
                     }
                 except KeyError:
                     pass  # Optional, not critical
@@ -300,65 +310,100 @@ class MarketDataFetcher:
 
     def calculate_capex_score(self, capex_data: dict) -> float:
         """
-        Calculates a score (0-1) based on CapEx development.
-        0 = low bubble risk (CapEx decreasing/stable), 1 = high risk (increasing).
+        Calculates a score (0-1) based on CapEx AND Free Cash Flow development.
+
+        Compares CapEx growth against FCF growth for each ticker:
+        - CapEx grows faster than FCF → Bubble risk (score → 1.0)
+        - FCF grows faster or equal to CapEx → Healthy growth (score → 0.0)
+        - Both declining/stable → Neutral (score → 0.5)
+
+        Uses absolute CapEx values and raw (negative) FCF values.
+        Returns 0.5 (neutral) if no data available.
         """
         if not capex_data:
             return 0.5  # Neutral if no data
 
-        # Collect quarterly CapEx for all tickers
-        # CapEx is negative (money outflow) - use absolute value
-        all_quarterly = {}  # ticker -> {quarter: abs_capex}
+        # Collect quarterly CapEx (absolute values) and FCF for all tickers
+        all_quarterly_capex = {}  # ticker -> {quarter: abs_capex}
+        all_quarterly_fcf = {}    # ticker -> {quarter: fcf (negative)}
 
         for ticker, data in capex_data.items():
+            # Quarterly CapEx (absolute value of expenditures)
             quarterly = data.get("quarterly_capex", {})
             if quarterly:
-                # Reverse negative values (absolute value of expenditures)
-                # Filter out None values from _extract_scalar before converting
                 abs_quarterly = {
                     k: abs(float(v)) for k, v in quarterly.items() if v is not None
                 }
-                all_quarterly[ticker] = abs_quarterly
+                all_quarterly_capex[ticker] = abs_quarterly
 
-        if not all_quarterly:
-            return 0.5  # No quarterly data → neutral
+            # Quarterly Free Cash Flow (absolute value, same convention as CapEx)
+            # yfinance returns FCF as negative; we store absolute for comparison
+            quarterly_fcf = data.get("quarterly_free_cash_flow", {})
+            if quarterly_fcf:
+                all_quarterly_fcf[ticker] = {
+                    k: abs(float(v)) for k, v in quarterly_fcf.items() if v is not None
+                }
 
-        # For each ticker: compare latest quarter with previous quarters
-        # Rising CapEx = higher bubble risk
+        has_capex = bool(all_quarterly_capex)
+        has_fcf = bool(all_quarterly_fcf)
+
+        if not has_capex and not has_fcf:
+            return 0.5  # No data at all → neutral
+
         ticker_scores = []
 
-        for ticker, quarters in all_quarterly.items():
-            if len(quarters) < 2:
-                ticker_scores.append(0.5)
-                continue
+        for ticker in set(list(all_quarterly_capex.keys()) + list(all_quarterly_fcf.keys())):
+            capex_quarters = all_quarterly_capex.get(ticker, {})
+            fcf_quarters = all_quarterly_fcf.get(ticker, {})
 
-            sorted_quarters = sorted(quarters.keys())
-            latest_vals = [float(quarters[q]) for q in sorted_quarters[-4:]]  # Last 4 quarters
+            # --- CapEx trend (last 4 quarters) ---
+            capex_growth = None
+            if capex_quarters and len(capex_quarters) >= 2:
+                sorted_keys = sorted(capex_quarters.keys())
+                latest_vals = [float(capex_quarters[q]) for q in sorted_keys[-4:]]
+                capex_growth = self._compute_avg_growth(latest_vals)
 
-            if len(latest_vals) < 2:
-                ticker_scores.append(0.5)
-                continue
+            # --- FCF trend (last 4 quarters) ---
+            fcf_growth = None
+            if fcf_quarters and len(fcf_quarters) >= 2:
+                sorted_keys = sorted(fcf_quarters.keys())
+                latest_vals = [float(fcf_quarters[q]) for q in sorted_keys[-4:]]
+                fcf_growth = self._compute_avg_growth(latest_vals)
 
-            # Calculate trend: average change between consecutive quarters
-            changes = []
-            for i in range(1, len(latest_vals)):
-                if latest_vals[i - 1] != 0:
-                    change = (latest_vals[i] - latest_vals[i - 1]) / abs(latest_vals[i - 1])
-                    changes.append(change)
+            # --- Decision logic ---
+            if capex_growth is not None and fcf_growth is not None:
+                # BOTH available: compare CapEx vs FCF growth
+                diff = capex_growth - fcf_growth
+                # diff > 0  → CapEx outpaces FCF → bubble risk
+                # diff < 0  → FCF outpaces CapEx → healthy
+                score = 0.5 + (diff / 0.20)  # 20pp gap → full score
+                score = max(0.0, min(1.0, score))
 
-            if not changes:
-                ticker_scores.append(0.5)
-                continue
+            elif capex_growth is not None:
+                # CapEx only (no FCF data) → use original logic
+                score = 0.5 + (capex_growth / 0.20)
+                score = max(0.0, min(1.0, score))
 
-            avg_change = sum(changes) / len(changes)
+            else:
+                # FCF only, no CapEx → neutral
+                score = 0.5
 
-            # Mapping: +10% quarterly growth → Score 1.0, -10% → Score 0.0
-            # Negative CapEx change = less investment = lower bubble risk
-            score = 0.5 + (avg_change / 0.20)  # 20% growth = Score 1.5, clamped
-            score = max(0.0, min(1.0, score))
             ticker_scores.append(score)
 
         return sum(ticker_scores) / len(ticker_scores) if ticker_scores else 0.5
+
+    @staticmethod
+    def _compute_avg_growth(values: list[float]) -> float | None:
+        """Compute average quarter-over-quarter growth rate (relative change).
+        Returns None if growth cannot be computed."""
+        if len(values) < 2:
+            return None
+        changes = []
+        for i in range(1, len(values)):
+            if values[i - 1] != 0:
+                change = (values[i] - values[i - 1]) / abs(values[i - 1])
+                changes.append(change)
+        return sum(changes) / len(changes) if changes else None
 
     def calculate_market_score(self, metrics: dict) -> float:
         """
