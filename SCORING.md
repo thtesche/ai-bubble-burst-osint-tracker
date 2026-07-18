@@ -7,7 +7,7 @@ The **AI Bubble Burst OSINT Tracker** computes a **Bubble Probability Score** in
 The score is composed of three independent sub-scoring modules that are combined linearly:
 
 ```
-final_bubble_score = ((1.0 - mean_sentiment_score) × 0.4)
+final_bubble_score = (mean_sentiment_score × 0.4)
                    + (market_score             × 0.2)
                    + (capex_score              × 0.4)
 ```
@@ -45,22 +45,18 @@ The **mean_sentiment_score** is the arithmetic mean of all article sentiment sco
 mean_sentiment_score = Σ(article_sentiment_score_i) / n
 ```
 
-### Inversion in the Final Formula
+### Direct Mapping in the Final Formula
 
-The sentiment score is **0.0 = bearish, 1.0 = bullish**. However, since *both* extreme euphoria (1.0) *and* panicked warnings (0.0) are bubble signals, the value is **inverted** in the main formula:
+The sentiment score is **0.0 = bearish, 1.0 = bullish**. For bubble formation risk, **euphoric, bullish sentiment is the signal** — explosive growth narratives and FOMO drive bubbles. The value is used **directly** in the main formula:
 
 ```
-(1.0 - mean_sentiment_score) × 0.4
+mean_sentiment_score × 0.4
 ```
 
 This means:
-- **Strongly bearish news (0.0):** `1.0 - 0.0 = 1.0` → **maximum contribution to bubble score** (crash risk)
-- **Strongly bullish news (1.0):** `1.0 - 1.0 = 0.0` → **no contribution to bubble score**
-- **Neutral news (0.5):** `1.0 - 0.5 = 0.5` → moderate contribution
-
-> **Note:** This inversion was introduced after the original bug was identified: bearish sentiment incorrectly pushed the overall score downward, contradicting the intended risk model.
-
----
+- **Strongly bullish news (1.0):** `1.0 × 0.4 = 0.4` → **maximum contribution to bubble score** (euphoria = bubble signal)
+- **Strongly bearish news (0.0):** `0.0 × 0.4 = 0.0` → **no contribution to bubble score** (warnings are not bubble formation signals)
+- **Neutral news (0.5):** `0.5 × 0.4 = 0.2` → moderate contribution
 
 ## 3. Market Score
 
@@ -175,7 +171,7 @@ final_capex_score = Σ(ticker_capex_score_i) / n
 ## 5. Final Bubble Score Formula
 
 ```
-final_bubble_score = ((1.0 - mean_sentiment_score) × 0.4)
+final_bubble_score = (mean_sentiment_score × 0.4)
                    + (market_score             × 0.2)
                    + (capex_score              × 0.4)
 ```
@@ -185,16 +181,16 @@ The final score is scaled to the percentage range 0–100 % by multiplying by 10
 ### Example Calculation (fictional)
 
 Assume:
-- `mean_sentiment_score` = 0.35 (panicking, warning-laden news)
+- `mean_sentiment_score` = 0.80 (euphoric, growth-celebrating news)
 - `market_score` = 0.60 (prices well above SMA 200, strong YTD)
 - `capex_score` = 0.85 (massive infrastructure buildout)
 
 ```
-Inverted Sentiment:  (1.0 - 0.35) × 0.4 = 0.65 × 0.4 = 0.26
+Sentiment:           0.80 × 0.4 = 0.32
 Market Contribution: 0.60 × 0.2 = 0.12
 CapEx Contribution:  0.85 × 0.4 = 0.34
 
-final_bubble_score = 0.26 + 0.12 + 0.34 = 0.72 (72.0 %) → Critical risk zone 🔴
+final_bubble_score = 0.32 + 0.12 + 0.34 = 0.78 (78.0 %) → Critical risk zone 🔴
 ```
 
 ---
@@ -215,7 +211,7 @@ The score is interpreted by the LLM prompt and the Telegram output as follows:
 
 | Component | 0.0 | 0.5 | 1.0 |
 |-----------|-----|-----|-----|
-| **Sentiment** | Panicking warnings | Balanced reporting | Euphoric posts |
+|| **Sentiment** | Bearish warnings | Balanced reporting | Euphoric growth narratives |
 | **Market** | Stable / undervalued | Moderately elevated | Extreme overvaluation |
 | **CapEx** | Stagnation / decline | Moderate growth | Aggressive infrastructure buildout |
 
@@ -237,4 +233,4 @@ The score is interpreted by the LLM prompt and the Telegram output as follows:
 1. **Fail-Fast:** When data cannot be fetched, a `PipelineError` is raised — no silent fallback values.
 2. **No Fake Data:** Missing data means no scoring, not a fictional neutral score (except for justified fallbacks like CapEx score 0.5 for missing quarterly data).
 3. **Transparency:** Each component is clearly and linearly scalable 0.0–1.0 and traceable.
-4. **Inversion as Feature:** Inverting the sentiment score (bearish news → higher bubble score) was introduced after the bug was explicitly identified.
+4. **Direct Sentiment Mapping:** Bullish sentiment (euphoria, FOMO) contributes directly to bubble risk — no inversion.

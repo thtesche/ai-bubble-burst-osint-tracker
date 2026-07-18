@@ -389,8 +389,8 @@ async def run_pipeline(
     print(f"    CapEx Score:        {capex_score:.4f}")
 
     # Sentiment is 0.0=bearish, 1.0=bullish.
-    # Invert it: bearish news → high bubble risk, bullish news → low risk.
-    final_bubble_score = ((1.0 - mean_sentiment_score) * 0.4) + (market_score * 0.2) + (capex_score * 0.4)
+    # Direct contribution: bullish euphoria → higher bubble risk.
+    final_bubble_score = (mean_sentiment_score * 0.4) + (market_score * 0.2) + (capex_score * 0.4)
     final_bubble_score *= 100
     print(f"\n[!!!] FINAL REAL BUBBLE SCORE: {final_bubble_score:.2f}%")
 

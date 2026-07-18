@@ -18,7 +18,7 @@ Weights: 40% Sentiment · 20% Market · 40% CapEx.
 
 | Module | Responsibility |
 |--------|----------------|
-| `src/fetchers/googlenews.py` | Google News RSS + URL decoding (googlenewsdecoder) + Firecrawl scraping (local Atlantis) |
+| `src/fetchers/googlenews.py` | Google News RSS + URL decoding (googlenewsdecoder) + Firecrawl scraping |
 | `src/fetchers/market.py` | yfinance — prices + CapEx (cash flow statements) |
 | `src/core/engine.py` | Keyword-density sentiment + weighted final score |
 | `src/core/logger.py` | RunLogger — saves every run to `logs/runs/<timestamp>/` |
@@ -118,10 +118,8 @@ Add a daily entry (example: 08:00):
 
 ## 📈 Roadmap (V2)
 
-- [ ] **Professional API Integration:** Replace yfinance scraping with Alpha Vantage or Polygon.io.
 - [ ] **Extended Data Sources:** Crypto data and VC funding news integration.
 - [ ] **Visualization Dashboard:** Score history display.
-- [ ] **Discord / Slack Delivery:** Multi-channel output support.
 
 ---
 *Developed with Hermes Agent (by Nous Research)*

@@ -65,7 +65,7 @@ def build_user_prompt(
         f"  - 0.0 = strongly bearish (warnings of bubble, overvaluation, crash)\n",
         f"  - 0.5 = neutral (balanced reporting, no clear bias)\n",
         f"  - 1.0 = strongly bullish (praises AI growth, explosive expansion)\n",
-        f"  → Inverted for risk: bullish news → higher bubble risk\n",
+        f"  → Direct mapping: bullish euphoria → higher bubble risk\n",
         f"\n",
         f"- **Market Score (Prices): 0.0–1.0**\n",
         f"  - 0.0 = stable or under fair value\n",
