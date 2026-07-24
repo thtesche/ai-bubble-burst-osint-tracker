@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import asyncio
 import httpx
 from typing import Optional, Dict, Any, AsyncIterator, Tuple
 from dataclasses import dataclass, field
@@ -24,7 +25,8 @@ class LLMEngine:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: float = 60.0,
+        timeout: float = 180.0,
+        max_concurrent: int = 2,
     ):
         self.api_key = api_key or os.getenv("LLM_API_KEY", "")
         self.base_url = (
@@ -33,6 +35,9 @@ class LLMEngine:
         ).rstrip("/")
         self.model = model or os.getenv("LLM_MODEL", "gpt-4o-mini")
         self.timeout = timeout
+        # Semaphore: begrenzt gleichzeitige Requests, damit das Modell
+        # nicht mit mehr parallelen Calls überladen wird, als es verträgt.
+        self._semaphore = asyncio.Semaphore(max_concurrent)
 
         if not self.api_key:
             print("[!] WARNING: LLM_API_KEY not set — API may require one")
@@ -60,37 +65,38 @@ class LLMEngine:
         api_url = f"{self.base_url}/chat/completions"
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(api_url, json=payload, headers=headers)
+            async with self._semaphore:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.post(api_url, json=payload, headers=headers)
 
-                if response.status_code != 200:
-                    error_text = response.text[:500]
+                    if response.status_code != 200:
+                        error_text = response.text[:500]
+                        return LLMResponse(
+                            content="",
+                            model=self.model,
+                            error=f"API error {response.status_code}: {error_text}"
+                        )
+
+                    data = response.json()
+                    choices = data.get("choices", [])
+                    if not choices:
+                        return LLMResponse(
+                            content="",
+                            model=self.model,
+                            error="No choices in API response"
+                        )
+
+                    content = choices[0].get("message", {}).get("content", "")
+                    if content:
+                        content = re.sub(r"<thinking>.*?</thinking>\s*", "", content, flags=re.DOTALL)
+                    
+                    usage = data.get("usage", {})
+
                     return LLMResponse(
-                        content="",
+                        content=content or "",
                         model=self.model,
-                        error=f"API error {response.status_code}: {error_text}"
+                        usage=usage,
                     )
-
-                data = response.json()
-                choices = data.get("choices", [])
-                if not choices:
-                    return LLMResponse(
-                        content="",
-                        model=self.model,
-                        error="No choices in API response"
-                    )
-
-                content = choices[0].get("message", {}).get("content", "")
-                if content:
-                    content = re.sub(r"<thinking>.*?</thinking>\s*", "", content, flags=re.DOTALL)
-                
-                usage = data.get("usage", {})
-
-                return LLMResponse(
-                    content=content or "",
-                    model=self.model,
-                    usage=usage,
-                )
 
         except httpx.TimeoutException:
             return LLMResponse(
@@ -133,46 +139,46 @@ class LLMEngine:
         api_url = f"{self.base_url}/chat/completions"
 
         try:
-            # client.stream() statt client.post() nutzen
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                async with client.stream("POST", api_url, json=payload, headers=headers) as response:
-                    
-                    if response.status_code != 200:
-                        error_text = await response.aread()
-                        yield "error", f"API error {response.status_code}: {error_text.decode()[:500]}"
-                        return
+            async with self._semaphore:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    async with client.stream("POST", api_url, json=payload, headers=headers) as response:
+                        
+                        if response.status_code != 200:
+                            error_text = await response.aread()
+                            yield "error", f"API error {response.status_code}: {error_text.decode()[:500]}"
+                            return
 
-                    # Zeile für Zeile den SSE-Stream auslesen
-                    async for line in response.aiter_lines():
-                        line = line.strip()
-                        
-                        if not line or not line.startswith("data: "):
-                            continue
-                        
-                        # Das "data: " Präfix abschneiden
-                        json_str = line[6:]
-                        
-                        if json_str == "[DONE]":
-                            break
+                        # Zeile für Zeile den SSE-Stream auslesen
+                        async for line in response.aiter_lines():
+                            line = line.strip()
                             
-                        try:
-                            chunk = json.loads(json_str)
-                            choices = chunk.get("choices", [])
-                            if not choices:
+                            if not line or not line.startswith("data: "):
                                 continue
-                                
-                            delta = choices[0].get("delta", {})
                             
-                            # 1. Thread: Thinking extrahieren (OpenAI / DeepSeek Standard)
-                            if "reasoning_content" in delta and delta["reasoning_content"]:
-                                yield "thinking", delta["reasoning_content"]
+                            # Das "data: " Präfix abschneiden
+                            json_str = line[6:]
+                            
+                            if json_str == "[DONE]":
+                                break
                                 
-                            # 2. Thread: Die eigentliche Antwort extrahieren
-                            if "content" in delta and delta["content"]:
-                                yield "content", delta["content"]
+                            try:
+                                chunk = json.loads(json_str)
+                                choices = chunk.get("choices", [])
+                                if not choices:
+                                    continue
+                                    
+                                delta = choices[0].get("delta", {})
                                 
-                        except json.JSONDecodeError:
-                            continue
+                                # 1. Thread: Thinking extrahieren (OpenAI / DeepSeek Standard)
+                                if "reasoning_content" in delta and delta["reasoning_content"]:
+                                    yield "thinking", delta["reasoning_content"]
+                                    
+                                # 2. Thread: Die eigentliche Antwort extrahieren
+                                if "content" in delta and delta["content"]:
+                                    yield "content", delta["content"]
+                                    
+                            except json.JSONDecodeError:
+                                continue
 
         except httpx.TimeoutException:
             yield "error", f"API request timed out after {self.timeout}s"
