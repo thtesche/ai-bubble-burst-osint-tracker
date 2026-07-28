@@ -274,13 +274,21 @@ class GoogleNewsFetcher:
             print(f"[*] Scraping {len(result['raw_urls'])} URLs with Firecrawl...")
             try:
                 scraped = []
+                failed_count = 0
                 for url in result["raw_urls"]:
                     scrape_result = await self.firecrawl.scrape(url)
                     if scrape_result:
                         scraped.append(scrape_result)
+                    else:
+                        failed_count += 1
                 for i, article in enumerate(articles):
                     if i < len(scraped):
                         article["content"] = scraped[i].get("markdown", "")
+                    else:
+                        article["content"] = ""
+                if failed_count > 0:
+                    print(f"[!] Firecrawl: {failed_count}/{len(result['raw_urls'])} URLs failed to scrape")
+                    print("[!] Falling back to RSS descriptions for failed articles")
             except Exception as e:
                 print(f"[!] Firecrawl scraping failed: {e}")
 

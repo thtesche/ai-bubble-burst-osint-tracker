@@ -41,6 +41,15 @@ class FirecrawlEngine:
             except httpx.HTTPStatusError as e:
                 print(f"[!] Firecrawl scrape failed: {e.response.status_code} - {e.response.text}")
                 return None
+            except httpx.ConnectError as e:
+                print(f"[!] Firecrawl connection failed ({url}): {e}")
+                return None
+            except httpx.NetworkError as e:
+                print(f"[!] Firecrawl network error ({url}): {e}")
+                return None
+            except httpx.TimeoutException as e:
+                print(f"[!] Firecrawl timeout ({url}): {e}")
+                return None
             except Exception as e:
                 print(f"[!] Unexpected error scraping {url}: {e}")
                 return None

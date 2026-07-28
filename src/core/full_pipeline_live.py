@@ -371,6 +371,7 @@ async def run_pipeline(
                 "title": a["title"],
                 "sentiment_score": a["sentiment_score"],
                 "reason": a["reason"],
+                "content_length": len(a.get("content", "")),
             }
             for a in article_sentiments
         ],
