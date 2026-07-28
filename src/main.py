@@ -34,7 +34,7 @@ async def main_async():
     load_env(env_path)
 
     # 1. Configuration
-    SEARCH_QUERY = os.getenv("SEARCH_QUERY", "AI market bubble burst risk analysis 2025 2026")
+    SEARCH_QUERY = os.getenv("SEARCH_QUERY", "(ai OR ki) hype")
     _env_tickers = os.getenv("MARKET_TICKERS", None)
     MARKET_TICKERS = [t.strip() for t in _env_tickers.split(",") if t.strip()] if _env_tickers else get_all_tickers()
     LIMIT = int(os.getenv("PIPELINE_LIMIT", "5"))

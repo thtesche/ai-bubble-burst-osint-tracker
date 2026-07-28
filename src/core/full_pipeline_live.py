@@ -94,8 +94,8 @@ def _build_sentiment_user_prompt(title: str, content: str) -> str:
     """Build the user prompt for a single article's sentiment analysis."""
     return (
         f"Article Title: {title}\n\n"
-        f"Article Content (truncated to ~4000 chars):\n"
-        f"{content[:4000]}\n"
+        f"Article Content (truncated to ~10000 chars):\n"
+        f"{content[:10000]}\n"
         f"\nAnalyze the sentiment of this article regarding the AI market/tech sector."
     )
 
@@ -111,7 +111,7 @@ async def _analyze_sentiment_by_article(
         {
             'url': str (origin_url or link),
             'title': str,
-            'content': str (truncated to 2000 chars),
+            'content': str,
             'sentiment_score': float,
             'reason': str
         }
@@ -141,7 +141,7 @@ async def _analyze_sentiment_by_article(
             return {
                 "url": url,
                 "title": title,
-                "content": content[:2000],  # keep content for reference
+                "content": content,  # keep full content for reference
                 "sentiment_score": score,
                 "reason": parsed.get("reason", ""),
             }
@@ -150,7 +150,7 @@ async def _analyze_sentiment_by_article(
             return {
                 "url": url,
                 "title": title,
-                "content": content[:2000],
+"content": content,  # keep full content for reference
                 "sentiment_score": 0.5,  # fallback: neutral
                 "reason": f"LLM error: {response.error}",
             }

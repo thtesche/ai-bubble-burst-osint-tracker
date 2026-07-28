@@ -61,13 +61,19 @@ class GoogleNewsFetcher:
 
     def _build_rss_url(self, query: str, limit: int = 10) -> str:
         """Builds the Google News RSS URL."""
-        encoded_query = urllib.parse.quote(query)
-        return (
-            f"https://news.google.com/rss/search?"
-            f"q={encoded_query}"
-            f"&hl=en&gl=US&ceid=US:en"
-            f"&num={limit}"
-        )
+        # 1. 'when:7d' direkt in die Suchanfrage integrieren
+        full_query = f"{query} when:7d"
+
+        # 2. Parameter als Dictionary definieren
+        params = {
+            "q": full_query,
+            "num": limit,  # Sprache (z. B. 'de' oder 'en-US')
+        }
+
+        # 3. urlencode kümmert sich um alle Leerzeichen, Klammern und Sonderzeichen
+        encoded_params = urllib.parse.urlencode(params)
+
+        return f"https://news.google.com/rss/search?{encoded_params}"
 
     def _fetch_rss(self, url: str) -> str:
         """Fetches the RSS feed from Google News."""
