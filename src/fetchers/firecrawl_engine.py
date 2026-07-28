@@ -13,11 +13,11 @@ class FirecrawlEngine:
 
     def __init__(self, api_key: str | None = None):
         self.base_url = os.getenv(
-            "FIRECRAWL_BASE_URL", "http://atlantis:3002/v1"
+            "FIRECRAWL_BASE_URL", "http://localhost:3002/v1"
         ).rstrip("/")
         self.api_key = api_key or os.getenv("FIRECRAWL_API_KEY", "")
         if not self.api_key:
-            print("[*] Firecrawl Engine: No API key found (local cache mode).")
+            print(f"[*] Firecrawl Engine: No API key found (local cache mode). Target: {self.base_url}")
         else:
             print(f"[*] Firecrawl Engine initialized. Target: {self.base_url}")
 
