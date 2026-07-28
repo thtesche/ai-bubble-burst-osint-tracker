@@ -16,6 +16,7 @@ from src.fetchers.googlenews import GoogleNewsFetcher
 from src.fetchers.market import MarketDataFetcher
 from src.core.logger import RunLogger
 from src.inference import LLMEngine, LLMResponse, build_system_prompt, build_user_prompt
+from src.core.taxonomy import get_all_tickers
 
 
 def _format_capex_value(val) -> str | None:
@@ -281,9 +282,7 @@ async def run_pipeline(
         PipelineError: if critical data fetching fails.
     """
     if tickers is None:
-        tickers = ["MSFT", "GOOGL", "AMZN", "META", "NVDA",
-                    "AMD", "ASML", "AVGO", "MU", "DELL",
-                    "SMCI", "HPE"]
+        tickers = get_all_tickers()
 
     print("=== STARTING LIVE DATA ===")
 

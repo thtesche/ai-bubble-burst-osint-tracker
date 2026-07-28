@@ -6,6 +6,7 @@ import asyncio
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.core.full_pipeline_live import run_pipeline, PipelineResult
+from src.core.taxonomy import get_all_tickers
 from src.delivery.telegram import TelegramDelivery
 
 
@@ -34,7 +35,8 @@ async def main_async():
 
     # 1. Configuration
     SEARCH_QUERY = os.getenv("SEARCH_QUERY", "AI market bubble burst risk analysis 2025 2026")
-    MARKET_TICKERS = [t.strip() for t in os.getenv("MARKET_TICKERS", "MSFT,GOOGL,AMZN,META,NVDA,AMD,ASML,AVGO,MU,DELL,SMCI,HPE").split(",") if t.strip()]
+    _env_tickers = os.getenv("MARKET_TICKERS", None)
+    MARKET_TICKERS = [t.strip() for t in _env_tickers.split(",") if t.strip()] if _env_tickers else get_all_tickers()
     LIMIT = int(os.getenv("PIPELINE_LIMIT", "5"))
     HITS_TO_DECODE = int(os.getenv("HITS_TO_DECODE", "1"))  # Number of Google News articles to decode (default: 1)
 
