@@ -68,10 +68,17 @@ class FirecrawlEngine:
                        f"blocked/unavailable: {url}")
             print(f"[!] Firecrawl 404/unavailable: {err_msg}")
             return None
-        # Explicit ok=false check
+        # Explicit ok=false check (legacy Firecrawl format)
         if data.get("ok") is False:
             print(f"[!] Firecrawl returned error for: {url}")
             return None
+
+        markdown = scraped.get("markdown", "")
+        if not markdown:
+            print(f"[!] Firecrawl returned no markdown for: {url}")
+            return None
+
+        return {"url": url, "markdown": markdown}
 
     def run(self, url: str) -> Optional[dict]:
         """Synchronous wrapper for sync environments.
