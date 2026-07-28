@@ -183,7 +183,7 @@ class MarketDataFetcher:
                     }
                 except KeyError:
                     # Check alternative keys
-                    capex_data["annual_capex"] = self._extract_capex_from_index(annual_cashflow)
+                    capex_data["annual_capex"] = self._extract_capex_from_index(annual_cashflow, ticker)
 
                 # Quarterly CapEx (important for trend change detection)
                 try:
@@ -193,7 +193,7 @@ class MarketDataFetcher:
                         for q, val in quarterly_capex.dropna().items()
                     }
                 except KeyError:
-                    capex_data["quarterly_capex"] = self._extract_capex_from_index(quarterly_cashflow)
+                    capex_data["quarterly_capex"] = self._extract_capex_from_index(quarterly_cashflow, ticker)
 
                 # Free Cash Flow - annual
                 try:
@@ -215,7 +215,10 @@ class MarketDataFetcher:
                 except KeyError:
                     pass  # Optional, not critical
 
-                print(f"[+] {ticker}: CapEx fetched successfully")
+                if capex_data.get("annual_capex") or capex_data.get("quarterly_capex"):
+                    print(f"[+] {ticker}: CapEx fetched successfully")
+                else:
+                    print(f"    [!] {ticker}: No CapEx data available, skipping.")
                 results[ticker] = capex_data
 
             except Exception as e:
@@ -229,7 +232,7 @@ class MarketDataFetcher:
 
         return results
 
-    def _extract_capex_from_index(self, cashflow_df) -> dict:
+    def _extract_capex_from_index(self, cashflow_df, ticker) -> dict:
         """
         Falls back if 'Capital Expenditure' doesn't exist as index key.
         Searches the index for similar keys and extracts the data.
@@ -270,7 +273,7 @@ class MarketDataFetcher:
 
         if capex_keys:
             key = capex_keys[0]
-            print(f"    [!] Using '{key}' as CapEx key for {self.tickers}")
+            print(f"    [!] Using '{key}' as CapEx key for {ticker}")
             series = cashflow_df.loc[key]
             return {
                 str(date): _extract_scalar(val)
@@ -292,7 +295,7 @@ class MarketDataFetcher:
             if "PURCHASE" not in label:
                 continue
             if any(t in label for t in heuristic_terms):
-                print(f"    [!] Heuristic CapEx match: '{idx_label}' for {self.tickers}")
+                print(f"    [!] Heuristic CapEx match: '{idx_label}' for {ticker}")
                 series = cashflow_df.loc[idx_label]
                 return {
                     str(date): _extract_scalar(val)
@@ -301,7 +304,7 @@ class MarketDataFetcher:
 
         # Give up — log available indices for debugging
         print(
-            f"    [!] 'Capital Expenditure' not found for {self.tickers}."
+            f"    [!] 'Capital Expenditure' not found for {ticker}."
         )
         print(
             f"    Available CashFlow indices: {[str(i) for i in available_indices[:20]]}"

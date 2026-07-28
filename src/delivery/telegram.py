@@ -132,67 +132,67 @@ class TelegramDelivery:
                         return False
             print("[+] LLM evaluation sent.")
 
-        # --- Section 2: Market Data ---
-        if market_metrics:
-            print("[*] Sending market data to Telegram...")
-            market_text = "**📈 Market Data:**\n"
-            for ticker, data in market_metrics.items():
-                market_text += (
-                    f"- **{ticker}**: ${data['current_price_dollar']:.2f} "
-                    f"(daily: {data['daily_change_percent']:+.2f}%, "
-                    f"SMA 200: {data['distance_from_sma_200_percent']:+.2f}%, "
-                    f"YTD: {data['ytd_change_percent']:+.2f}%)\n"
-                )
-            chunks = split_telegram_message(market_text)
-            for chunk in chunks:
-                payload = {
-                    "chat_id": self.chat_id,
-                    "text": chunk,
-                    "parse_mode": "Markdown"
-                }
+        # # --- Section 2: Market Data ---
+        # if market_metrics:
+        #     print("[*] Sending market data to Telegram...")
+        #     market_text = "**📈 Market Data:**\n"
+        #     for ticker, data in market_metrics.items():
+        #         market_text += (
+        #             f"- **{ticker}**: ${data['current_price_dollar']:.2f} "
+        #             f"(daily: {data['daily_change_percent']:+.2f}%, "
+        #             f"SMA 200: {data['distance_from_sma_200_percent']:+.2f}%, "
+        #             f"YTD: {data['ytd_change_percent']:+.2f}%)\n"
+        #         )
+        #     chunks = split_telegram_message(market_text)
+        #     for chunk in chunks:
+        #         payload = {
+        #             "chat_id": self.chat_id,
+        #             "text": chunk,
+        #             "parse_mode": "Markdown"
+        #         }
 
-                async with httpx.AsyncClient() as client:
-                    try:
-                        response = await client.post(self.base_url, json=payload)
-                        if response.status_code != 200:
-                            print(f"[!] Telegram API error: {response.status_code} - {response.text}")
-                            return False
-                    except Exception as e:
-                        print(f"[!] Failed to send Telegram message: {e}")
-                        return False
-            print("[+] Market data sent.")
+        #         async with httpx.AsyncClient() as client:
+        #             try:
+        #                 response = await client.post(self.base_url, json=payload)
+        #                 if response.status_code != 200:
+        #                     print(f"[!] Telegram API error: {response.status_code} - {response.text}")
+        #                     return False
+        #             except Exception as e:
+        #                 print(f"[!] Failed to send Telegram message: {e}")
+        #                 return False
+        #     print("[+] Market data sent.")
 
-        # CapEx section (part of market data)
-        if capex_data:
-            print("[*] Sending CapEx data to Telegram...")
-            capex_text = "**💰 CapEx Summary:**\n"
-            for ticker, data in capex_data.items():
-                quarterly = data.get("quarterly_capex", {})
-                if quarterly:
-                    sorted_q = sorted(quarterly.keys(), reverse=True)[:3]
-                    latest_vals = [abs(float(quarterly[q])) for q in sorted_q]
-                    capex_text += (
-                        f"- **{ticker}**: Latest 3 quarters: "
-                        f"{', '.join(f'{v:.0f}' for v in latest_vals)}\n"
-                    )
-            chunks = split_telegram_message(capex_text)
-            for chunk in chunks:
-                payload = {
-                    "chat_id": self.chat_id,
-                    "text": chunk,
-                    "parse_mode": "Markdown"
-                }
+        # # CapEx section (part of market data)
+        # if capex_data:
+        #     print("[*] Sending CapEx data to Telegram...")
+        #     capex_text = "**💰 CapEx Summary:**\n"
+        #     for ticker, data in capex_data.items():
+        #         quarterly = data.get("quarterly_capex", {})
+        #         if quarterly:
+        #             sorted_q = sorted(quarterly.keys(), reverse=True)[:3]
+        #             latest_vals = [abs(float(quarterly[q])) for q in sorted_q]
+        #             capex_text += (
+        #                 f"- **{ticker}**: Latest 3 quarters: "
+        #                 f"{', '.join(f'{v:.0f}' for v in latest_vals)}\n"
+        #             )
+        #     chunks = split_telegram_message(capex_text)
+        #     for chunk in chunks:
+        #         payload = {
+        #             "chat_id": self.chat_id,
+        #             "text": chunk,
+        #             "parse_mode": "Markdown"
+        #         }
 
-                async with httpx.AsyncClient() as client:
-                    try:
-                        response = await client.post(self.base_url, json=payload)
-                        if response.status_code != 200:
-                            print(f"[!] Telegram API error: {response.status_code} - {response.text}")
-                            return False
-                    except Exception as e:
-                        print(f"[!] Failed to send Telegram message: {e}")
-                        return False
-            print("[+] CapEx data sent.")
+        #         async with httpx.AsyncClient() as client:
+        #             try:
+        #                 response = await client.post(self.base_url, json=payload)
+        #                 if response.status_code != 200:
+        #                     print(f"[!] Telegram API error: {response.status_code} - {response.text}")
+        #                     return False
+        #             except Exception as e:
+        #                 print(f"[!] Failed to send Telegram message: {e}")
+        #                 return False
+        #     print("[+] CapEx data sent.")
 
         # --- Section 3: Google News ---
         if googlenews_articles:
