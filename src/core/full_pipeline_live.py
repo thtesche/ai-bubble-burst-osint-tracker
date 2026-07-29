@@ -73,10 +73,31 @@ class PipelineError(Exception):
     pass
 
 
+_RELEVANCE_SYSTEM_PROMPT = (
+    "You are a content classification assistant. Given a news article, determine "
+    "whether it is RELEVANT or NOT RELEVANT to the topic of the AI market "
+    "bubble / technology sector valuation concerns.\n\n"
+    "An article is RELEVANT if it discusses ANY of the following:\n"
+    "- AI/technology market valuation, speculation, or bubble concerns\n"
+    "- Technology stock overvaluation, market mania, or hype\n"
+    "- AI investment spending, data center buildout, or CapEx concerns\n"
+    "- Tech/AI stock price risks, corrections, or crashes\n"
+    "- Tech/AI sector growth debates (bullish or bearish perspectives)\n"
+    "- Specific AI companies' stock valuations or market positioning\n\n"
+    "An article is NOT RELEVANT if it discusses:\n"
+    "- AI applications in non-financial contexts (healthcare, education, etc.)\n"
+    "- General technology product reviews or launches\n"
+    "- AI ethics, regulation, or policy without market/valuation angle\n"
+    "- Purely technical AI research without market implications\n"
+    "- Unrelated topics entirely\n\n"
+    "Output ONLY a JSON object — no explanations:\n"
+    "{'relevant': <true/false>, 'reason': '<short 1-sentence explanation>'}\n"
+)
+
 _SENTIMENT_SYSTEM_PROMPT = (
-    "You are a sentiment analysis expert. Given a news article text, "
+    "You are a sentiment analysis expert. Given a news article, "
     "assign a sentiment score between 0.0 and 1.0 based on the article's "
-    "stance toward the AI market/tech sector.\n\n"
+    "stance toward the AI market bubble risk.\n\n"
     "Scoring rubric (directed at AI bubble risk):\n"
     "- 0.0 = strongly bearish: article warns of AI bubble, describes "
     "speculative mania, overvaluation, impending crash\n"
@@ -100,12 +121,86 @@ def _build_sentiment_user_prompt(title: str, content: str) -> str:
     )
 
 
+def _build_relevance_user_prompt(title: str, content: str) -> str:
+    """Build the user prompt for a single article's relevance classification."""
+    return (
+        f"Article Title: {title}\n\n"
+        f"Article Content (truncated to ~10000 chars):\n"
+        f"{content[:10000]}\n"
+        f"\nDetermine whether this article is relevant to the AI market bubble / technology sector valuation concerns."
+    )
+
+
+
+
+async def _classify_relevance(article: dict, llm_engine: LLMEngine) -> dict:
+    """
+    Call the LLM to classify whether an article is relevant to AI market bubble.
+
+    Returns:
+        {
+            'url': str,
+            'title': str,
+            'relevant': bool,
+            'reason': str,
+        }
+    """
+    url = article.get("origin_url") or article.get("link", "")
+    title = article.get("title", "No Title")
+    content = article.get("content") or article.get("description", "")
+
+    try:
+        response = await llm_engine.generate_async(
+            prompt=_build_relevance_user_prompt(title, content),
+            system_prompt=_RELEVANCE_SYSTEM_PROMPT,
+        )
+
+        if response.is_success and response.content:
+            raw = response.content.strip()
+            if raw.startswith("```"):
+                raw = raw.strip("`").strip()
+                if raw.startswith("json"):
+                    raw = raw[4:].strip()
+            parsed = json.loads(raw)
+            relevant = bool(parsed.get("relevant", True))
+            return {
+                "url": url,
+                "title": title,
+                "relevant": relevant,
+                "reason": parsed.get("reason", ""),
+            }
+        else:
+            print(f"[!] LLM relevance check failed for '{title}': {response.error}")
+            return {
+                "url": url,
+                "title": title,
+                "relevant": True,  # fallback: conservative
+                "reason": f"LLM error: {response.error}",
+            }
+    except json.JSONDecodeError as e:
+        print(f"[!] JSON parse error for relevance check on '{title}': {e}")
+        return {
+            "url": url,
+            "title": title,
+            "relevant": True,  # fallback: conservative
+            "reason": f"JSON parse error: {e}",
+        }
+    except Exception as e:
+        print(f"[!] Unexpected error for relevance check on '{title}': {e}")
+        return {
+            "url": url,
+            "title": title,
+            "relevant": True,  # fallback: conservative
+            "reason": f"Unexpected error: {e}",
+        }
+
 async def _analyze_sentiment_by_article(
     article: dict,
     llm_engine: LLMEngine,
 ) -> dict:
     """
-    Call the LLM for ONE article and return structured sentiment data.
+    Call the LLM for ONE article with a two-stage process:
+    (1) Relevance classification, (2) Sentiment analysis (only if relevant).
 
     Returns:
         {
@@ -113,6 +208,7 @@ async def _analyze_sentiment_by_article(
             'title': str,
             'content': str,
             'sentiment_score': float,
+            'relevant': bool,
             'reason': str
         }
     """
@@ -121,6 +217,20 @@ async def _analyze_sentiment_by_article(
     # Prefer Firecrawl-scraped content (full markdown); fall back to description
     content = article.get("content") or article.get("description", "")
 
+    # Step 1: Relevance check
+    relevance = await _classify_relevance(article, llm_engine)
+
+    if not relevance["relevant"]:
+        return {
+            "url": relevance["url"],
+            "title": relevance["title"],
+            "content": content,
+            "sentiment_score": 0.5,  # neutral -- excluded from mean
+            "relevant": False,
+            "reason": f"IRRELEVANT: {relevance['reason']}",
+        }
+
+    # Step 2: Sentiment analysis (only for relevant articles)
     try:
         response = await llm_engine.generate_async(
             prompt=_build_sentiment_user_prompt(title, content),
@@ -143,6 +253,7 @@ async def _analyze_sentiment_by_article(
                 "title": title,
                 "content": content,  # keep full content for reference
                 "sentiment_score": score,
+                "relevant": True,
                 "reason": parsed.get("reason", ""),
             }
         else:
@@ -150,8 +261,9 @@ async def _analyze_sentiment_by_article(
             return {
                 "url": url,
                 "title": title,
-"content": content,  # keep full content for reference
+                "content": content,  # keep full content for reference
                 "sentiment_score": 0.5,  # fallback: neutral
+                "relevant": True,  # fallback: conservative
                 "reason": f"LLM error: {response.error}",
             }
     except json.JSONDecodeError as e:
@@ -161,6 +273,7 @@ async def _analyze_sentiment_by_article(
             "title": title,
             "content": content[:2000],
             "sentiment_score": 0.5,
+            "relevant": True,  # fallback: conservative
             "reason": f"JSON parse error: {e}",
         }
     except Exception as e:
@@ -170,6 +283,7 @@ async def _analyze_sentiment_by_article(
             "title": title,
             "content": content[:2000],
             "sentiment_score": 0.5,
+            "relevant": True,  # fallback: conservative
             "reason": f"Unexpected error: {e}",
         }
 
@@ -345,15 +459,17 @@ async def run_pipeline(
     tasks = [_analyze_sentiment_by_article(article, llm_engine) for article in googlenews_articles]
     article_sentiments: list[dict] = await asyncio.gather(*tasks)
 
-    # Calculate mean sentiment score
+    # Calculate mean sentiment score (only from relevant articles)
+    relevant_articles = [a for a in article_sentiments if a.get("relevant", True)]
     mean_sentiment_score = (
-        sum(a["sentiment_score"] for a in article_sentiments) / len(article_sentiments)
-        if article_sentiments else 0.5
+        sum(a["sentiment_score"] for a in relevant_articles) / len(relevant_articles)
+        if relevant_articles else 0.5
     )
 
     print(f"    Article-level sentiment scores:")
     for i, a in enumerate(article_sentiments, 1):
-        print(f"      [{i}] {a['title'][:60]}... → {a['sentiment_score']:.3f}")
+        status = "RELEVANT" if a.get("relevant", True) else "IRRELEVANT (excluded)"
+        print(f"      [{i}] {a['title'][:60]}... → {a['sentiment_score']:.3f} [{status}]")
     print(f"    Mean Sentiment Score: {mean_sentiment_score:.4f}")
 
     # Save per-article sentiment JSON to logs
@@ -370,6 +486,7 @@ async def run_pipeline(
                 "url": a["url"],
                 "title": a["title"],
                 "sentiment_score": a["sentiment_score"],
+                "relevant": a.get("relevant", True),
                 "reason": a["reason"],
                 "content_length": len(a.get("content", "")),
             }
